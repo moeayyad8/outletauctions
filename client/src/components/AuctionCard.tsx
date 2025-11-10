@@ -78,22 +78,19 @@ export function AuctionCard({
             </p>
           </div>
         </div>
-        <div className="flex items-center justify-between text-sm">
-          <p className="font-bold text-lg" data-testid={`text-bid-${id}`}>
-            ${nextBid.toLocaleString()}
-          </p>
-          <p className="text-muted-foreground">
+        <div className="flex items-center justify-between gap-2">
+          <Button
+            onClick={handleBid}
+            className="flex-1 gap-2"
+            data-testid={`button-bid-${id}`}
+          >
+            <Gavel className="h-4 w-4" />
+            <span data-testid={`text-bid-${id}`}>Bid ${nextBid.toLocaleString()}</span>
+          </Button>
+          <p className="text-xs text-muted-foreground whitespace-nowrap">
             {bidCount} {bidCount === 1 ? 'bid' : 'bids'}
           </p>
         </div>
-        <Button
-          onClick={handleBid}
-          className="w-full gap-2"
-          data-testid={`button-bid-${id}`}
-        >
-          <Gavel className="h-4 w-4" />
-          Bid
-        </Button>
       </div>
     </Card>
   );
