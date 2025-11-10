@@ -11,6 +11,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 
+import logoImg from '@assets/OUTLET AUCTIONS_1762736482366.png';
+
 //todo: remove mock functionality
 import cameraImg from '@assets/generated_images/Vintage_camera_auction_item_567c74a8.png';
 import headphonesImg from '@assets/generated_images/Wireless_headphones_product_02537959.png';
@@ -101,10 +103,12 @@ export default function Browse() {
     <div className="min-h-screen bg-background pb-20">
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
         <div className="flex items-center justify-between h-14 px-4">
-          <div>
-            <h1 className="text-lg font-bold">BidHub</h1>
-            <p className="text-xs text-muted-foreground">Live Auctions</p>
-          </div>
+          <img 
+            src={logoImg} 
+            alt="Outlet Auction" 
+            className="h-8"
+            data-testid="img-logo"
+          />
           <div className="flex items-center gap-2">
             <Button size="icon" variant="ghost" data-testid="button-notifications">
               <Bell className="h-5 w-5" />
