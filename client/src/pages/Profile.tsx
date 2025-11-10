@@ -3,9 +3,11 @@ import { Card } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Settings, User, Gavel, Heart, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import type { User as UserType } from '@shared/schema';
 
 export default function Profile() {
   const { user, isAuthenticated } = useAuth();
+  const typedUser = user as UserType | undefined;
   
   const menuItems = [
     { icon: Gavel, label: 'My Bids', testId: 'my-bids' },
@@ -14,17 +16,17 @@ export default function Profile() {
   ];
 
   const getUserInitials = () => {
-    if (!user?.firstName && !user?.lastName) return <User className="h-8 w-8" />;
-    const first = user.firstName?.[0] || '';
-    const last = user.lastName?.[0] || '';
+    if (!typedUser?.firstName && !typedUser?.lastName) return <User className="h-8 w-8" />;
+    const first = typedUser.firstName?.[0] || '';
+    const last = typedUser.lastName?.[0] || '';
     return `${first}${last}`.toUpperCase();
   };
 
   const getDisplayName = () => {
-    if (user?.firstName || user?.lastName) {
-      return `${user.firstName || ''} ${user.lastName || ''}`.trim();
+    if (typedUser?.firstName || typedUser?.lastName) {
+      return `${typedUser.firstName || ''} ${typedUser.lastName || ''}`.trim();
     }
-    return user?.email || 'Guest';
+    return typedUser?.email || 'Guest';
   };
 
   return (
@@ -41,8 +43,8 @@ export default function Profile() {
               <h1 className="text-xl font-bold" data-testid="text-username">
                 {getDisplayName()}
               </h1>
-              {isAuthenticated && user?.email && (
-                <p className="text-sm text-muted-foreground">{user.email}</p>
+              {isAuthenticated && typedUser?.email && (
+                <p className="text-sm text-muted-foreground">{typedUser.email}</p>
               )}
             </div>
           </div>
