@@ -36,10 +36,19 @@ const mockAuctions = Array.from({ length: 99 }, (_, i) => {
   const nameIndex = Math.floor(i / productData.length) % productData[productIndex].names.length;
   const product = productData[productIndex];
   
+  let currentBid;
+  if (i < 20) {
+    currentBid = Math.floor(5 + Math.random() * 15);
+  } else if (i < 40) {
+    currentBid = Math.floor(20 + Math.random() * 31);
+  } else {
+    currentBid = Math.floor(50 + Math.random() * 2500);
+  }
+  
   return {
     id: String(i + 1),
     title: product.names[nameIndex],
-    currentBid: Math.floor(50 + Math.random() * 2500),
+    currentBid,
     endTime: new Date(Date.now() + Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000)),
     image: product.img,
     bidCount: Math.floor(1 + Math.random() * 40),
