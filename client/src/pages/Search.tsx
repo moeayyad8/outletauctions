@@ -23,12 +23,15 @@ import { useToast } from '@/hooks/use-toast';
 import cameraImg from '@assets/generated_images/Vintage_camera_auction_item_567c74a8.png';
 import headphonesImg from '@assets/generated_images/Wireless_headphones_product_02537959.png';
 import watchImg from '@assets/generated_images/Luxury_watch_auction_0a8d3cfb.png';
+import handbagImg from '@assets/generated_images/Designer_handbag_item_812faad0.png';
+import laptopImg from '@assets/generated_images/Gaming_laptop_auction_2ffb5e51.png';
+import guitarImg from '@assets/generated_images/Acoustic_guitar_item_806d6b76.png';
 
 //todo: remove mock functionality
 const mockAuctions = [
   {
     id: '1',
-    title: 'Vintage Analog Camera - Rare 1960s Film Camera',
+    title: 'Vintage Analog Camera',
     currentBid: 850,
     endTime: new Date(Date.now() + 2 * 60 * 60 * 1000),
     image: cameraImg,
@@ -37,7 +40,7 @@ const mockAuctions = [
   },
   {
     id: '2',
-    title: 'Premium Wireless Headphones - Noise Cancelling',
+    title: 'Wireless Headphones',
     currentBid: 245,
     endTime: new Date(Date.now() + 45 * 60 * 1000),
     image: headphonesImg,
@@ -46,11 +49,74 @@ const mockAuctions = [
   },
   {
     id: '3',
-    title: 'Luxury Swiss Watch - Automatic Chronograph',
+    title: 'Luxury Swiss Watch',
     currentBid: 2400,
     endTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
     image: watchImg,
     bidCount: 23,
+    category: 'fashion',
+  },
+  {
+    id: '4',
+    title: 'Designer Handbag',
+    currentBid: 680,
+    endTime: new Date(Date.now() + 8 * 60 * 60 * 1000),
+    image: handbagImg,
+    bidCount: 15,
+    category: 'fashion',
+  },
+  {
+    id: '5',
+    title: 'Gaming Laptop',
+    currentBid: 1200,
+    endTime: new Date(Date.now() + 18 * 60 * 60 * 1000),
+    image: laptopImg,
+    bidCount: 19,
+    category: 'electronics',
+  },
+  {
+    id: '6',
+    title: 'Acoustic Guitar',
+    currentBid: 450,
+    endTime: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    image: guitarImg,
+    bidCount: 7,
+    category: 'music',
+  },
+  {
+    id: '7',
+    title: 'Vintage Camera Lens',
+    currentBid: 320,
+    endTime: new Date(Date.now() + 12 * 60 * 60 * 1000),
+    image: cameraImg,
+    bidCount: 5,
+    category: 'electronics',
+  },
+  {
+    id: '8',
+    title: 'Bluetooth Speaker',
+    currentBid: 180,
+    endTime: new Date(Date.now() + 6 * 60 * 60 * 1000),
+    image: headphonesImg,
+    bidCount: 14,
+    category: 'electronics',
+  },
+  {
+    id: '9',
+    title: 'Smart Watch Pro',
+    currentBid: 890,
+    endTime: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000),
+    image: watchImg,
+    bidCount: 31,
+    category: 'fashion',
+  },
+  {
+    id: '10',
+    title: 'Leather Wallet',
+    currentBid: 125,
+    endTime: new Date(Date.now() + 4 * 60 * 60 * 1000),
+    image: handbagImg,
+    bidCount: 9,
     category: 'fashion',
   },
 ];
@@ -222,7 +288,7 @@ export default function Search() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid grid-cols-2 gap-3">
           {filteredAuctions.map((auction) => (
             <AuctionCard
               key={auction.id}

@@ -20,7 +20,7 @@ import guitarImg from '@assets/generated_images/Acoustic_guitar_item_806d6b76.pn
 const mockAuctions = [
   {
     id: '1',
-    title: 'Vintage Analog Camera - Rare 1960s Film Camera',
+    title: 'Vintage Analog Camera',
     currentBid: 850,
     endTime: new Date(Date.now() + 2 * 60 * 60 * 1000),
     image: cameraImg,
@@ -28,7 +28,7 @@ const mockAuctions = [
   },
   {
     id: '2',
-    title: 'Premium Wireless Headphones - Noise Cancelling',
+    title: 'Wireless Headphones',
     currentBid: 245,
     endTime: new Date(Date.now() + 45 * 60 * 1000),
     image: headphonesImg,
@@ -36,7 +36,7 @@ const mockAuctions = [
   },
   {
     id: '3',
-    title: 'Luxury Swiss Watch - Automatic Chronograph',
+    title: 'Luxury Swiss Watch',
     currentBid: 2400,
     endTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
     image: watchImg,
@@ -44,7 +44,7 @@ const mockAuctions = [
   },
   {
     id: '4',
-    title: 'Designer Leather Handbag - Limited Edition',
+    title: 'Designer Handbag',
     currentBid: 680,
     endTime: new Date(Date.now() + 8 * 60 * 60 * 1000),
     image: handbagImg,
@@ -52,7 +52,7 @@ const mockAuctions = [
   },
   {
     id: '5',
-    title: 'Gaming Laptop - High Performance RGB',
+    title: 'Gaming Laptop',
     currentBid: 1200,
     endTime: new Date(Date.now() + 18 * 60 * 60 * 1000),
     image: laptopImg,
@@ -60,11 +60,59 @@ const mockAuctions = [
   },
   {
     id: '6',
-    title: 'Acoustic Guitar - Professional Grade',
+    title: 'Acoustic Guitar',
     currentBid: 450,
     endTime: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
     image: guitarImg,
     bidCount: 7,
+  },
+  {
+    id: '7',
+    title: 'Vintage Camera Lens',
+    currentBid: 320,
+    endTime: new Date(Date.now() + 12 * 60 * 60 * 1000),
+    image: cameraImg,
+    bidCount: 5,
+  },
+  {
+    id: '8',
+    title: 'Bluetooth Speaker',
+    currentBid: 180,
+    endTime: new Date(Date.now() + 6 * 60 * 60 * 1000),
+    image: headphonesImg,
+    bidCount: 14,
+  },
+  {
+    id: '9',
+    title: 'Smart Watch Pro',
+    currentBid: 890,
+    endTime: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000),
+    image: watchImg,
+    bidCount: 31,
+  },
+  {
+    id: '10',
+    title: 'Leather Wallet',
+    currentBid: 125,
+    endTime: new Date(Date.now() + 4 * 60 * 60 * 1000),
+    image: handbagImg,
+    bidCount: 9,
+  },
+  {
+    id: '11',
+    title: 'Gaming Mouse',
+    currentBid: 95,
+    endTime: new Date(Date.now() + 20 * 60 * 1000),
+    image: laptopImg,
+    bidCount: 22,
+  },
+  {
+    id: '12',
+    title: 'Electric Guitar',
+    currentBid: 780,
+    endTime: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+    image: guitarImg,
+    bidCount: 11,
   },
 ];
 
@@ -113,7 +161,7 @@ export default function Browse() {
           </Badge>
         </div>
 
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid grid-cols-2 gap-3">
           {mockAuctions.map((auction) => (
             <AuctionCard
               key={auction.id}
