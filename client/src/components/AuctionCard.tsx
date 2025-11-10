@@ -68,15 +68,23 @@ export function AuctionCard({
       <div className="p-3 space-y-2">
         <div className="flex justify-between items-start text-sm">
           <div>
-            <p className="text-muted-foreground">Auction ending in:</p>
+            <p className="text-muted-foreground">Ending in</p>
             <CountdownTimer endTime={endTime} compact />
           </div>
           <div className="text-right">
-            <p className="text-muted-foreground">Retail price:</p>
-            <p className="font-bold" data-testid={`text-bid-${id}`}>
+            <p className="text-muted-foreground">Retail</p>
+            <p className="font-bold" data-testid={`text-retail-${id}`}>
               ${currentBid.toLocaleString()}
             </p>
           </div>
+        </div>
+        <div className="flex items-center justify-between text-sm">
+          <p className="font-bold text-lg" data-testid={`text-bid-${id}`}>
+            ${nextBid.toLocaleString()}
+          </p>
+          <p className="text-muted-foreground">
+            {bidCount} {bidCount === 1 ? 'bid' : 'bids'}
+          </p>
         </div>
         <Button
           onClick={handleBid}
