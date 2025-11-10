@@ -2,13 +2,12 @@ import { BottomNav } from '@/components/BottomNav';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Settings, User, Gavel, Package, Heart, ChevronRight } from 'lucide-react';
+import { Settings, User, Gavel, Heart, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 export default function Profile() {
   const menuItems = [
     { icon: Gavel, label: 'My Bids', count: 5, testId: 'my-bids' },
-    { icon: Package, label: 'My Listings', count: 2, testId: 'my-listings' },
     { icon: Heart, label: 'Watchlist', count: 8, testId: 'watchlist' },
     { icon: Settings, label: 'Settings', testId: 'settings' },
   ];
