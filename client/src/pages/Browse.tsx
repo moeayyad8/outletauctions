@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { useMutation } from '@tanstack/react-query';
+import { apiRequest, queryClient } from '@/lib/queryClient';
 
 //todo: remove mock functionality
 import cameraImg from '@assets/generated_images/Vintage_camera_auction_item_567c74a8.png';
@@ -64,11 +66,34 @@ export default function Browse() {
     setBidDialogOpen(true);
   };
 
+  const bidMutation = useMutation({
+    mutationFn: async (data: { auctionId: number; amount: number; auctionTitle: string; auctionImage: string }) => {
+      return apiRequest('POST', '/api/bids', data);
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/bids'] });
+      setBidDialogOpen(false);
+      toast({
+        title: 'Bid placed successfully!',
+        description: `Your bid of $${variables.amount.toLocaleString()} has been placed.`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: 'Failed to place bid',
+        description: 'Please try again.',
+        variant: 'destructive',
+      });
+    },
+  });
+
   const handleBidSubmit = (amount: number) => {
-    console.log('Bid submitted:', amount);
-    toast({
-      title: 'Bid placed successfully!',
-      description: `Your bid of $${amount.toLocaleString()} has been placed.`,
+    if (!selectedAuction) return;
+    bidMutation.mutate({
+      auctionId: parseInt(selectedAuction.id),
+      amount,
+      auctionTitle: selectedAuction.title,
+      auctionImage: selectedAuction.image,
     });
   };
 

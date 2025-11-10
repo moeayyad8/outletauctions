@@ -1,10 +1,15 @@
-import { users, type User, type UpsertUser } from "@shared/schema";
+import { users, bids, watchlist, type User, type UpsertUser, type Bid, type InsertBid, type Watchlist, type InsertWatchlist } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  createBid(bid: InsertBid): Promise<Bid>;
+  getUserBids(userId: string): Promise<Bid[]>;
+  getUserWatchlist(userId: string): Promise<Watchlist[]>;
+  addToWatchlist(item: InsertWatchlist): Promise<Watchlist>;
+  removeFromWatchlist(userId: string, auctionId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -26,6 +31,28 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return user;
+  }
+
+  async createBid(bid: InsertBid): Promise<Bid> {
+    const [newBid] = await db.insert(bids).values(bid).returning();
+    return newBid;
+  }
+
+  async getUserBids(userId: string): Promise<Bid[]> {
+    return db.select().from(bids).where(eq(bids.userId, userId)).orderBy(desc(bids.createdAt));
+  }
+
+  async getUserWatchlist(userId: string): Promise<Watchlist[]> {
+    return db.select().from(watchlist).where(eq(watchlist.userId, userId)).orderBy(desc(watchlist.createdAt));
+  }
+
+  async addToWatchlist(item: InsertWatchlist): Promise<Watchlist> {
+    const [newItem] = await db.insert(watchlist).values(item).returning();
+    return newItem;
+  }
+
+  async removeFromWatchlist(userId: string, auctionId: number): Promise<void> {
+    await db.delete(watchlist).where(and(eq(watchlist.userId, userId), eq(watchlist.auctionId, auctionId)));
   }
 }
 

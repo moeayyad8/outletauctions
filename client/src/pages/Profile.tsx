@@ -1,19 +1,24 @@
 import { BottomNav } from '@/components/BottomNav';
 import { Card } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Settings, User, Gavel, Heart, ChevronRight } from 'lucide-react';
+import { Settings, User, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import type { User as UserType } from '@shared/schema';
+import { useQuery } from '@tanstack/react-query';
+import type { User as UserType, Bid, Watchlist } from '@shared/schema';
 
 export default function Profile() {
   const { user, isAuthenticated } = useAuth();
   const typedUser = user as UserType | undefined;
   
-  const menuItems = [
-    { icon: Gavel, label: 'My Bids', testId: 'my-bids' },
-    { icon: Heart, label: 'Watchlist', testId: 'watchlist' },
-    { icon: Settings, label: 'Settings', testId: 'settings' },
-  ];
+  const { data: bids = [], isLoading: bidsLoading } = useQuery<Bid[]>({
+    queryKey: ['/api/bids'],
+    enabled: isAuthenticated,
+  });
+
+  const { data: watchlist = [], isLoading: watchlistLoading } = useQuery<Watchlist[]>({
+    queryKey: ['/api/watchlist'],
+    enabled: isAuthenticated,
+  });
 
   const getUserInitials = () => {
     if (!typedUser?.firstName && !typedUser?.lastName) return <User className="h-8 w-8" />;
@@ -51,28 +56,87 @@ export default function Profile() {
         </div>
       </header>
 
-      <main className="p-4 space-y-3">
-        {menuItems.map((item) => {
-          const Icon = item.icon;
-          return (
-            <Card
-              key={item.label}
-              className="p-4 hover-elevate active-elevate-2 cursor-pointer"
-              onClick={() => console.log(`Navigate to ${item.label}`)}
-              data-testid={`card-${item.testId}`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-md bg-muted flex items-center justify-center flex-shrink-0">
-                  <Icon className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">{item.label}</p>
-                </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-              </div>
-            </Card>
-          );
-        })}
+      <main className="p-4 space-y-6">
+        <div>
+          <h2 className="text-lg font-semibold mb-3">My Bids</h2>
+          {bidsLoading ? (
+            <p className="text-sm text-muted-foreground">Loading...</p>
+          ) : bids.length === 0 ? (
+            <p className="text-sm text-muted-foreground" data-testid="text-no-bids">Nothing here yet</p>
+          ) : (
+            <div className="space-y-3" data-testid="section-my-bids">
+              {bids.map((bid) => (
+                <Card key={bid.id} className="p-3">
+                  <div className="flex items-center gap-3">
+                    {bid.auctionImage && (
+                      <img 
+                        src={bid.auctionImage} 
+                        alt={bid.auctionTitle}
+                        className="w-16 h-16 object-cover rounded-md"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{bid.auctionTitle}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Your bid: ${bid.amount.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(bid.createdAt!).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <h2 className="text-lg font-semibold mb-3">Watchlist</h2>
+          {watchlistLoading ? (
+            <p className="text-sm text-muted-foreground">Loading...</p>
+          ) : watchlist.length === 0 ? (
+            <p className="text-sm text-muted-foreground" data-testid="text-no-watchlist">Nothing here yet</p>
+          ) : (
+            <div className="space-y-3" data-testid="section-watchlist">
+              {watchlist.map((item) => (
+                <Card key={item.id} className="p-3">
+                  <div className="flex items-center gap-3">
+                    {item.auctionImage && (
+                      <img 
+                        src={item.auctionImage} 
+                        alt={item.auctionTitle}
+                        className="w-16 h-16 object-cover rounded-md"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{item.auctionTitle}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Added {new Date(item.createdAt!).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <Card
+          className="p-4 hover-elevate active-elevate-2 cursor-pointer"
+          onClick={() => console.log('Navigate to Settings')}
+          data-testid="card-settings"
+        >
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-md bg-muted flex items-center justify-center flex-shrink-0">
+              <Settings className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div className="flex-1">
+              <p className="font-medium">Settings</p>
+            </div>
+            <ChevronRight className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+          </div>
+        </Card>
       </main>
 
       <BottomNav />
