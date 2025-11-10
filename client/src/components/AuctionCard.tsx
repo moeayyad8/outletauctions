@@ -45,51 +45,47 @@ export function AuctionCard({
       className="overflow-hidden"
       data-testid={`card-auction-${id}`}
     >
-      <div className="relative aspect-square bg-muted overflow-hidden">
+      <div className="relative aspect-square bg-muted overflow-hidden cursor-pointer" onClick={onClick}>
         <img
           src={image}
-          alt={title}
-          className="w-full h-full object-cover cursor-pointer hover-elevate active-elevate-2"
-          onClick={onClick}
+          alt="Auction item"
+          className="w-full h-full object-cover"
           data-testid={`img-auction-${id}`}
         />
-        <div className="absolute top-2 left-2">
-          <CountdownTimer endTime={endTime} />
-        </div>
-        <div className="absolute bottom-0 left-0 right-0 p-3">
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={handleWatch}
-              className="flex-1 bg-white/10 border-white/30 backdrop-blur-md text-white hover:bg-white/20"
-              data-testid={`button-watch-${id}`}
-            >
-              <Heart className={`h-4 w-4 ${isWatching ? 'fill-white' : ''}`} />
-            </Button>
-            <Button
-              onClick={handleBid}
-              className="flex-[2] gap-2"
-              data-testid={`button-bid-${id}`}
-            >
-              <Gavel className="h-4 w-4" />
-              Bid ${nextBid.toLocaleString()}
-            </Button>
-          </div>
+        <div className="absolute top-2 right-2">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleWatch}
+            className="bg-white/10 border-white/30 backdrop-blur-md text-white hover:bg-white/20"
+            data-testid={`button-watch-${id}`}
+          >
+            <Heart className={`h-4 w-4 ${isWatching ? 'fill-white' : ''}`} />
+          </Button>
         </div>
       </div>
 
-      <div className="p-3 space-y-1" onClick={onClick}>
-        <h3 className="font-semibold text-base line-clamp-2 cursor-pointer" data-testid={`text-title-${id}`}>
-          {title}
-        </h3>
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            {bidCount} {bidCount === 1 ? 'bid' : 'bids'}
-          </p>
-          <p className="text-xl font-bold" data-testid={`text-bid-${id}`}>
-            ${currentBid.toLocaleString()}
-          </p>
+      <div className="p-3 space-y-2">
+        <div className="flex justify-between items-start text-sm">
+          <div>
+            <p className="text-muted-foreground">Auction ending in:</p>
+            <CountdownTimer endTime={endTime} compact />
+          </div>
+          <div className="text-right">
+            <p className="text-muted-foreground">Retail price:</p>
+            <p className="font-bold" data-testid={`text-bid-${id}`}>
+              ${currentBid.toLocaleString()}
+            </p>
+          </div>
         </div>
+        <Button
+          onClick={handleBid}
+          className="w-full gap-2"
+          data-testid={`button-bid-${id}`}
+        >
+          <Gavel className="h-4 w-4" />
+          Bid
+        </Button>
       </div>
     </Card>
   );

@@ -5,9 +5,10 @@ import { Badge } from '@/components/ui/badge';
 interface CountdownTimerProps {
   endTime: Date;
   className?: string;
+  compact?: boolean;
 }
 
-export function CountdownTimer({ endTime, className = '' }: CountdownTimerProps) {
+export function CountdownTimer({ endTime, className = '', compact = false }: CountdownTimerProps) {
   const calculateTimeLeft = useCallback(() => {
     const difference = endTime.getTime() - new Date().getTime();
     
@@ -47,6 +48,14 @@ export function CountdownTimer({ endTime, className = '' }: CountdownTimerProps)
     if (timeLeft.hours > 0) return `${timeLeft.hours}h ${timeLeft.minutes}m`;
     return `${timeLeft.minutes}m ${timeLeft.seconds}s`;
   };
+
+  if (compact) {
+    return (
+      <p className={`font-semibold ${className}`} data-testid="text-countdown">
+        {formatTime()}
+      </p>
+    );
+  }
 
   return (
     <Badge variant={getVariant()} className={`gap-1 ${className}`} data-testid="badge-countdown">
