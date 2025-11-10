@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Slider } from '@/components/ui/slider';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 
 //todo: remove mock functionality
 import cameraImg from '@assets/generated_images/Vintage_camera_auction_item_567c74a8.png';
@@ -68,8 +69,20 @@ export default function Search() {
   const [selectedAuction, setSelectedAuction] = useState<typeof mockAuctions[0] | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const { toast } = useToast();
+  const { isAuthenticated } = useAuth();
 
   const handleBid = (auction: typeof mockAuctions[0]) => {
+    if (!isAuthenticated) {
+      toast({
+        title: 'Login required',
+        description: 'Please log in to place a bid.',
+        variant: 'destructive',
+      });
+      setTimeout(() => {
+        window.location.href = '/api/login';
+      }, 500);
+      return;
+    }
     setSelectedAuction(auction);
     setBidDialogOpen(true);
   };

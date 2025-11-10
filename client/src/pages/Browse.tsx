@@ -3,10 +3,11 @@ import { HeroSection } from '@/components/HeroSection';
 import { AuctionCard } from '@/components/AuctionCard';
 import { BidDialog } from '@/components/BidDialog';
 import { BottomNav } from '@/components/BottomNav';
-import { Bell } from 'lucide-react';
+import { Bell, LogIn, LogOut, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 
 //todo: remove mock functionality
 import cameraImg from '@assets/generated_images/Vintage_camera_auction_item_567c74a8.png';
@@ -45,8 +46,20 @@ export default function Browse() {
   const [bidDialogOpen, setBidDialogOpen] = useState(false);
   const [selectedAuction, setSelectedAuction] = useState<typeof mockAuctions[0] | null>(null);
   const { toast } = useToast();
+  const { isAuthenticated, isLoading } = useAuth();
 
   const handleBid = (auction: typeof mockAuctions[0]) => {
+    if (!isAuthenticated) {
+      toast({
+        title: 'Login required',
+        description: 'Please log in to place a bid.',
+        variant: 'destructive',
+      });
+      setTimeout(() => {
+        window.location.href = '/api/login';
+      }, 500);
+      return;
+    }
     setSelectedAuction(auction);
     setBidDialogOpen(true);
   };
@@ -67,9 +80,32 @@ export default function Browse() {
             <h1 className="text-lg font-bold">BidHub</h1>
             <p className="text-xs text-muted-foreground">Live Auctions</p>
           </div>
-          <Button size="icon" variant="ghost" data-testid="button-notifications">
-            <Bell className="h-5 w-5" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="icon" variant="ghost" data-testid="button-notifications">
+              <Bell className="h-5 w-5" />
+            </Button>
+            {!isLoading && (
+              isAuthenticated ? (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => window.location.href = '/api/logout'}
+                  data-testid="button-logout"
+                >
+                  <LogOut className="h-5 w-5" />
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={() => window.location.href = '/api/login'}
+                  data-testid="button-login"
+                >
+                  <LogIn className="h-4 w-4 mr-2" />
+                  Login
+                </Button>
+              )
+            )}
+          </div>
         </div>
       </header>
 
