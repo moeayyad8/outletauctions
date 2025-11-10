@@ -1,4 +1,4 @@
-import { Home, Search, PlusCircle, User } from 'lucide-react';
+import { Home, Search, User } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 
 export function BottomNav() {
@@ -7,7 +7,6 @@ export function BottomNav() {
   const navItems = [
     { icon: Home, label: 'Browse', path: '/', testId: 'browse' },
     { icon: Search, label: 'Search', path: '/search', testId: 'search' },
-    { icon: PlusCircle, label: 'Sell', path: '/create', testId: 'sell' },
     { icon: User, label: 'Profile', path: '/profile', testId: 'profile' },
   ];
 
