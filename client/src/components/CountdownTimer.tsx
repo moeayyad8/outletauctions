@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
@@ -8,9 +8,7 @@ interface CountdownTimerProps {
 }
 
 export function CountdownTimer({ endTime, className = '' }: CountdownTimerProps) {
-  const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
-
-  function calculateTimeLeft() {
+  const calculateTimeLeft = useCallback(() => {
     const difference = endTime.getTime() - new Date().getTime();
     
     if (difference <= 0) {
@@ -24,7 +22,9 @@ export function CountdownTimer({ endTime, className = '' }: CountdownTimerProps)
       seconds: Math.floor((difference / 1000) % 60),
       total: difference,
     };
-  }
+  }, [endTime]);
+
+  const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -32,7 +32,7 @@ export function CountdownTimer({ endTime, className = '' }: CountdownTimerProps)
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [endTime]);
+  }, [calculateTimeLeft]);
 
   const getVariant = () => {
     if (timeLeft.total <= 0) return 'secondary';

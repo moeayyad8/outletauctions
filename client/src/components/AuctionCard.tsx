@@ -45,23 +45,18 @@ export function AuctionCard({
       className="overflow-hidden"
       data-testid={`card-auction-${id}`}
     >
-      <div className="relative aspect-square bg-muted overflow-hidden" onClick={onClick}>
+      <div className="relative aspect-square bg-muted overflow-hidden">
         <img
           src={image}
           alt={title}
           className="w-full h-full object-cover cursor-pointer hover-elevate active-elevate-2"
+          onClick={onClick}
           data-testid={`img-auction-${id}`}
         />
         <div className="absolute top-2 left-2">
           <CountdownTimer endTime={endTime} />
         </div>
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent p-3 pt-8">
-          <div className="mb-2">
-            <p className="text-xs text-white/80">{bidCount} {bidCount === 1 ? 'bid' : 'bids'}</p>
-            <p className="text-2xl font-bold text-white" data-testid={`text-bid-${id}`}>
-              ${currentBid.toLocaleString()}
-            </p>
-          </div>
+        <div className="absolute bottom-0 left-0 right-0 p-3">
           <div className="flex gap-2">
             <Button
               variant="outline"
@@ -83,10 +78,18 @@ export function AuctionCard({
         </div>
       </div>
 
-      <div className="p-3" onClick={onClick}>
-        <h3 className="font-semibold text-sm line-clamp-2 cursor-pointer" data-testid={`text-title-${id}`}>
+      <div className="p-3 space-y-1" onClick={onClick}>
+        <h3 className="font-semibold text-base line-clamp-2 cursor-pointer" data-testid={`text-title-${id}`}>
           {title}
         </h3>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {bidCount} {bidCount === 1 ? 'bid' : 'bids'}
+          </p>
+          <p className="text-xl font-bold" data-testid={`text-bid-${id}`}>
+            ${currentBid.toLocaleString()}
+          </p>
+        </div>
       </div>
     </Card>
   );
