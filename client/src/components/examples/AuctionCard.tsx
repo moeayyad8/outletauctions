@@ -3,7 +3,7 @@ import cameraImg from '@assets/generated_images/Vintage_camera_auction_item_567c
 
 export default function AuctionCardExample() {
   return (
-    <div className="p-4 bg-background max-w-md">
+    <div className="p-4 bg-background">
       <AuctionCard
         id="1"
         title="Vintage Analog Camera - Rare 1960s Film Camera"

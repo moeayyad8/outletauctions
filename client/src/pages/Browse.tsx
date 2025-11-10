@@ -113,7 +113,7 @@ export default function Browse() {
           </Badge>
         </div>
 
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 gap-4">
           {mockAuctions.map((auction) => (
             <AuctionCard
               key={auction.id}
