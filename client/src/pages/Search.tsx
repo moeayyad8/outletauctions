@@ -28,98 +28,30 @@ import laptopImg from '@assets/generated_images/Gaming_laptop_auction_2ffb5e51.p
 import guitarImg from '@assets/generated_images/Acoustic_guitar_item_806d6b76.png';
 
 //todo: remove mock functionality
-const mockAuctions = [
-  {
-    id: '1',
-    title: 'Vintage Analog Camera',
-    currentBid: 850,
-    endTime: new Date(Date.now() + 2 * 60 * 60 * 1000),
-    image: cameraImg,
-    bidCount: 12,
-    category: 'electronics',
-  },
-  {
-    id: '2',
-    title: 'Wireless Headphones',
-    currentBid: 245,
-    endTime: new Date(Date.now() + 45 * 60 * 1000),
-    image: headphonesImg,
-    bidCount: 8,
-    category: 'electronics',
-  },
-  {
-    id: '3',
-    title: 'Luxury Swiss Watch',
-    currentBid: 2400,
-    endTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-    image: watchImg,
-    bidCount: 23,
-    category: 'fashion',
-  },
-  {
-    id: '4',
-    title: 'Designer Handbag',
-    currentBid: 680,
-    endTime: new Date(Date.now() + 8 * 60 * 60 * 1000),
-    image: handbagImg,
-    bidCount: 15,
-    category: 'fashion',
-  },
-  {
-    id: '5',
-    title: 'Gaming Laptop',
-    currentBid: 1200,
-    endTime: new Date(Date.now() + 18 * 60 * 60 * 1000),
-    image: laptopImg,
-    bidCount: 19,
-    category: 'electronics',
-  },
-  {
-    id: '6',
-    title: 'Acoustic Guitar',
-    currentBid: 450,
-    endTime: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
-    image: guitarImg,
-    bidCount: 7,
-    category: 'music',
-  },
-  {
-    id: '7',
-    title: 'Vintage Camera Lens',
-    currentBid: 320,
-    endTime: new Date(Date.now() + 12 * 60 * 60 * 1000),
-    image: cameraImg,
-    bidCount: 5,
-    category: 'electronics',
-  },
-  {
-    id: '8',
-    title: 'Bluetooth Speaker',
-    currentBid: 180,
-    endTime: new Date(Date.now() + 6 * 60 * 60 * 1000),
-    image: headphonesImg,
-    bidCount: 14,
-    category: 'electronics',
-  },
-  {
-    id: '9',
-    title: 'Smart Watch Pro',
-    currentBid: 890,
-    endTime: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000),
-    image: watchImg,
-    bidCount: 31,
-    category: 'fashion',
-  },
-  {
-    id: '10',
-    title: 'Leather Wallet',
-    currentBid: 125,
-    endTime: new Date(Date.now() + 4 * 60 * 60 * 1000),
-    image: handbagImg,
-    bidCount: 9,
-    category: 'fashion',
-  },
+const productData = [
+  { names: ['Vintage Camera', 'Camera Lens', 'Film Camera', 'Digital Camera', 'Retro Camera'], img: cameraImg, category: 'electronics' },
+  { names: ['Wireless Headphones', 'Bluetooth Speaker', 'Earbuds', 'Audio System', 'Sound Bar'], img: headphonesImg, category: 'electronics' },
+  { names: ['Luxury Watch', 'Smart Watch', 'Sports Watch', 'Classic Watch', 'Designer Watch'], img: watchImg, category: 'fashion' },
+  { names: ['Designer Handbag', 'Leather Wallet', 'Tote Bag', 'Clutch Purse', 'Travel Bag'], img: handbagImg, category: 'fashion' },
+  { names: ['Gaming Laptop', 'Gaming Mouse', 'Mechanical Keyboard', 'Monitor Stand', 'Webcam'], img: laptopImg, category: 'electronics' },
+  { names: ['Acoustic Guitar', 'Electric Guitar', 'Bass Guitar', 'Guitar Pedal', 'Guitar Amp'], img: guitarImg, category: 'music' },
 ];
+
+const mockAuctions = Array.from({ length: 99 }, (_, i) => {
+  const productIndex = i % productData.length;
+  const nameIndex = Math.floor(i / productData.length) % productData[productIndex].names.length;
+  const product = productData[productIndex];
+  
+  return {
+    id: String(i + 1),
+    title: product.names[nameIndex],
+    currentBid: Math.floor(50 + Math.random() * 2500),
+    endTime: new Date(Date.now() + Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000)),
+    image: product.img,
+    bidCount: Math.floor(1 + Math.random() * 40),
+    category: product.category,
+  };
+});
 
 const categories = [
   { id: 'electronics', label: 'Electronics' },
