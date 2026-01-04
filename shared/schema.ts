@@ -4,8 +4,10 @@ import {
   integer,
   jsonb,
   pgTable,
+  serial,
   timestamp,
   varchar,
+  text,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -71,3 +73,28 @@ export const insertWatchlistSchema = createInsertSchema(watchlist).omit({
 });
 export type InsertWatchlist = z.infer<typeof insertWatchlistSchema>;
 export type Watchlist = typeof watchlist.$inferSelect;
+
+// Auctions table - platform inventory
+export const auctions = pgTable("auctions", {
+  id: serial("id").primaryKey(),
+  upc: varchar("upc", { length: 20 }),
+  title: varchar("title", { length: 500 }).notNull(),
+  description: text("description"),
+  image: varchar("image", { length: 1000 }),
+  retailPrice: integer("retail_price"),
+  startingBid: integer("starting_bid").notNull().default(1),
+  currentBid: integer("current_bid").notNull().default(0),
+  bidCount: integer("bid_count").notNull().default(0),
+  endTime: timestamp("end_time"),
+  status: varchar("status", { length: 20 }).notNull().default("draft"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAuctionSchema = createInsertSchema(auctions).omit({
+  id: true,
+  currentBid: true,
+  bidCount: true,
+  createdAt: true,
+});
+export type InsertAuction = z.infer<typeof insertAuctionSchema>;
+export type Auction = typeof auctions.$inferSelect;
