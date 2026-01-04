@@ -1,4 +1,4 @@
-import { users, bids, watchlist, type User, type UpsertUser, type Bid, type InsertBid, type Watchlist, type InsertWatchlist } from "@shared/schema";
+import { users, bids, watchlist, auctions, type User, type UpsertUser, type Bid, type InsertBid, type Watchlist, type InsertWatchlist, type Auction, type InsertAuction } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
 
@@ -10,6 +10,9 @@ export interface IStorage {
   getUserWatchlist(userId: string): Promise<Watchlist[]>;
   addToWatchlist(item: InsertWatchlist): Promise<Watchlist>;
   removeFromWatchlist(userId: string, auctionId: number): Promise<void>;
+  createAuction(auction: InsertAuction): Promise<Auction>;
+  getAllAuctions(): Promise<Auction[]>;
+  getAuction(id: number): Promise<Auction | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -55,6 +58,20 @@ export class DatabaseStorage implements IStorage {
 
   async removeFromWatchlist(userId: string, auctionId: number): Promise<void> {
     await db.delete(watchlist).where(and(eq(watchlist.userId, userId), eq(watchlist.auctionId, auctionId)));
+  }
+
+  async createAuction(auction: InsertAuction): Promise<Auction> {
+    const [newAuction] = await db.insert(auctions).values(auction).returning();
+    return newAuction;
+  }
+
+  async getAllAuctions(): Promise<Auction[]> {
+    return db.select().from(auctions).orderBy(desc(auctions.createdAt));
+  }
+
+  async getAuction(id: number): Promise<Auction | undefined> {
+    const [auction] = await db.select().from(auctions).where(eq(auctions.id, id));
+    return auction;
   }
 }
 
