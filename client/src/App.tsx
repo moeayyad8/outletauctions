@@ -7,6 +7,7 @@ import Browse from "@/pages/Browse";
 import AuctionDetail from "@/pages/AuctionDetail";
 import Search from "@/pages/Search";
 import Profile from "@/pages/Profile";
+import Staff from "@/pages/Staff";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -16,6 +17,7 @@ function Router() {
       <Route path="/auction/:id" component={AuctionDetail} />
       <Route path="/search" component={Search} />
       <Route path="/profile" component={Profile} />
+      <Route path="/staff" component={Staff} />
       <Route component={NotFound} />
     </Switch>
   );
