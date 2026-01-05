@@ -61,22 +61,15 @@ export default function Staff() {
     },
     onSuccess: (data: ScanResult) => {
       setScanResult(data);
+      setCustomImage(null);
       
       if (data.lookupStatus === "SUCCESS") {
         toast({ title: `${data.codeType} found! Ready to list.` });
       } else if (data.lookupStatus === "NEEDS_ENRICHMENT") {
-        setEnrichmentQueue(prev => [...prev, {
-          code: data.code,
-          codeType: data.codeType,
-          title: data.title,
-          scannedAt: new Date()
-        }]);
         toast({ 
-          title: `${data.codeType} added to enrichment queue`,
-          description: 'Manual details needed later'
+          title: `${data.codeType} needs manual entry`,
+          description: 'Add image and details, then send to queue or list directly'
         });
-        setScanResult(null);
-        setCode('');
       } else {
         toast({ title: 'Product not found in database', variant: 'destructive' });
       }
@@ -347,6 +340,78 @@ export default function Staff() {
               toast({ title: 'Added to enrichment queue' });
             }}
             data-testid="button-add-to-queue"
+          >
+            Add to Enrichment Queue
+          </Button>
+        </div>
+      )}
+
+      {scanResult && scanResult.lookupStatus === "NEEDS_ENRICHMENT" && (
+        <div className="border border-orange-500 p-4 rounded space-y-3 bg-orange-50 dark:bg-orange-950">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-1 text-xs font-bold bg-orange-500 text-white rounded">{scanResult.codeType}</span>
+            <span className="text-orange-700 dark:text-orange-300 font-medium">Manual Entry Required</span>
+          </div>
+          <p><strong>Code:</strong> <code>{scanResult.code}</code></p>
+          <p className="text-sm text-muted-foreground">This {scanResult.codeType} cannot be looked up automatically. Add an image and send to queue for manual details.</p>
+          
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Add Product Image:</p>
+            <div className="flex items-center gap-3">
+              {customImage ? (
+                <div className="relative">
+                  <img 
+                    src={customImage} 
+                    alt="Custom upload" 
+                    className="w-24 h-24 object-contain bg-white rounded border"
+                  />
+                  <button 
+                    onClick={() => setCustomImage(null)}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="w-24 h-24 bg-muted rounded border flex items-center justify-center text-muted-foreground text-xs text-center p-2">
+                  No image yet
+                </div>
+              )}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <div className="flex items-center gap-2 px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 hover:bg-muted transition-colors">
+                  <Camera className="w-4 h-4" />
+                  <span className="text-sm">{isUploading ? 'Uploading...' : 'Upload Photo'}</span>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  disabled={isUploading}
+                  className="hidden"
+                  data-testid="input-asin-image"
+                />
+              </label>
+            </div>
+            {customImage && (
+              <p className="text-xs text-green-600">Image uploaded successfully</p>
+            )}
+          </div>
+          
+          <Button 
+            variant="outline"
+            onClick={() => {
+              setEnrichmentQueue(prev => [...prev, {
+                code: scanResult.code,
+                codeType: scanResult.codeType,
+                title: customImage ? `[Has Image] ${scanResult.title}` : scanResult.title,
+                scannedAt: new Date()
+              }]);
+              setScanResult(null);
+              setCode('');
+              setCustomImage(null);
+              toast({ title: 'Added to enrichment queue' });
+            }}
+            data-testid="button-asin-to-queue"
           >
             Add to Enrichment Queue
           </Button>
