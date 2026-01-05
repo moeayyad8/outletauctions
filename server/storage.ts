@@ -12,7 +12,9 @@ export interface IStorage {
   removeFromWatchlist(userId: string, auctionId: number): Promise<void>;
   createAuction(auction: InsertAuction): Promise<Auction>;
   getAllAuctions(): Promise<Auction[]>;
+  getActiveAuctions(): Promise<Auction[]>;
   getAuction(id: number): Promise<Auction | undefined>;
+  updateAuctionStatus(id: number, status: string, endTime?: Date): Promise<Auction | undefined>;
   getNextInternalCode(): Promise<string>;
   getAllTags(): Promise<Tag[]>;
   getTagsByType(type: string): Promise<Tag[]>;
@@ -81,9 +83,22 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(auctions).orderBy(desc(auctions.createdAt));
   }
 
+  async getActiveAuctions(): Promise<Auction[]> {
+    return db.select().from(auctions).where(eq(auctions.status, 'active')).orderBy(desc(auctions.createdAt));
+  }
+
   async getAuction(id: number): Promise<Auction | undefined> {
     const [auction] = await db.select().from(auctions).where(eq(auctions.id, id));
     return auction;
+  }
+
+  async updateAuctionStatus(id: number, status: string, endTime?: Date): Promise<Auction | undefined> {
+    const updateData: { status: string; endTime?: Date } = { status };
+    if (endTime) {
+      updateData.endTime = endTime;
+    }
+    const [updated] = await db.update(auctions).set(updateData).where(eq(auctions.id, id)).returning();
+    return updated;
   }
 
   async getNextInternalCode(): Promise<string> {

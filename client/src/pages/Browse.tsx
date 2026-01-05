@@ -1,67 +1,30 @@
 import { useState } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { HeroSection } from '@/components/HeroSection';
 import { AuctionCard } from '@/components/AuctionCard';
 import { BidDialog } from '@/components/BidDialog';
 import { BottomNav } from '@/components/BottomNav';
-import { Bell, LogIn, LogOut, User } from 'lucide-react';
+import { Bell, LogIn, LogOut, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
-import { useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 
 import logoImg from '@assets/OUTLET AUCTIONS_1762736482366.png';
-
-//todo: remove mock functionality
-import cameraImg from '@assets/generated_images/Vintage_camera_auction_item_567c74a8.png';
-import headphonesImg from '@assets/generated_images/Wireless_headphones_product_02537959.png';
-import watchImg from '@assets/generated_images/Luxury_watch_auction_0a8d3cfb.png';
-import handbagImg from '@assets/generated_images/Designer_handbag_item_812faad0.png';
-import laptopImg from '@assets/generated_images/Gaming_laptop_auction_2ffb5e51.png';
-import guitarImg from '@assets/generated_images/Acoustic_guitar_item_806d6b76.png';
-
-//todo: remove mock functionality
-const productData = [
-  { names: ['Vintage Camera', 'Camera Lens', 'Film Camera', 'Digital Camera', 'Retro Camera'], img: cameraImg },
-  { names: ['Wireless Headphones', 'Bluetooth Speaker', 'Earbuds', 'Audio System', 'Sound Bar'], img: headphonesImg },
-  { names: ['Luxury Watch', 'Smart Watch', 'Sports Watch', 'Classic Watch', 'Designer Watch'], img: watchImg },
-  { names: ['Designer Handbag', 'Leather Wallet', 'Tote Bag', 'Clutch Purse', 'Travel Bag'], img: handbagImg },
-  { names: ['Gaming Laptop', 'Gaming Mouse', 'Mechanical Keyboard', 'Monitor Stand', 'Webcam'], img: laptopImg },
-  { names: ['Acoustic Guitar', 'Electric Guitar', 'Bass Guitar', 'Guitar Pedal', 'Guitar Amp'], img: guitarImg },
-];
-
-const mockAuctions = Array.from({ length: 99 }, (_, i) => {
-  const productIndex = i % productData.length;
-  const nameIndex = Math.floor(i / productData.length) % productData[productIndex].names.length;
-  const product = productData[productIndex];
-  
-  let currentBid;
-  if (i < 20) {
-    currentBid = Math.floor(5 + Math.random() * 15);
-  } else if (i < 40) {
-    currentBid = Math.floor(20 + Math.random() * 31);
-  } else {
-    currentBid = Math.floor(50 + Math.random() * 2500);
-  }
-  
-  return {
-    id: String(i + 1),
-    title: product.names[nameIndex],
-    currentBid,
-    endTime: new Date(Date.now() + Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000)),
-    image: product.img,
-    bidCount: Math.floor(1 + Math.random() * 40),
-  };
-});
+import type { Auction } from '@shared/schema';
 
 export default function Browse() {
   const [bidDialogOpen, setBidDialogOpen] = useState(false);
-  const [selectedAuction, setSelectedAuction] = useState<typeof mockAuctions[0] | null>(null);
+  const [selectedAuction, setSelectedAuction] = useState<Auction | null>(null);
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
 
-  const handleBid = (auction: typeof mockAuctions[0]) => {
+  const { data: auctions = [], isLoading: auctionsLoading } = useQuery<Auction[]>({
+    queryKey: ['/api/auctions'],
+  });
+
+  const handleBid = (auction: Auction) => {
     if (!isAuthenticated) {
       toast({
         title: 'Login required',
@@ -83,6 +46,7 @@ export default function Browse() {
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['/api/bids'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/auctions'] });
       setBidDialogOpen(false);
       toast({
         title: 'Bid placed successfully!',
@@ -101,10 +65,10 @@ export default function Browse() {
   const handleBidSubmit = (amount: number) => {
     if (!selectedAuction) return;
     bidMutation.mutate({
-      auctionId: parseInt(selectedAuction.id),
+      auctionId: selectedAuction.id,
       amount,
       auctionTitle: selectedAuction.title,
-      auctionImage: selectedAuction.image,
+      auctionImage: selectedAuction.image || '',
     });
   };
 
@@ -153,23 +117,46 @@ export default function Browse() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">Active Auctions</h2>
-            <p className="text-sm text-muted-foreground">{mockAuctions.length} items available</p>
+            <p className="text-sm text-muted-foreground">{auctions.length} items available</p>
           </div>
           <Badge variant="secondary" data-testid="badge-ending-soon">
             Ending Soon
           </Badge>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          {mockAuctions.map((auction) => (
-            <AuctionCard
-              key={auction.id}
-              {...auction}
-              onBid={() => handleBid(auction)}
-              onClick={() => console.log('Navigate to auction detail:', auction.id)}
-            />
-          ))}
-        </div>
+        {auctionsLoading ? (
+          <div className="grid grid-cols-2 gap-3">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="aspect-square bg-muted animate-pulse rounded-lg" />
+            ))}
+          </div>
+        ) : auctions.length === 0 ? (
+          <div className="text-center py-16 px-4">
+            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+              <Package className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h3 className="font-semibold text-lg mb-1">No active auctions</h3>
+            <p className="text-muted-foreground text-sm max-w-xs mx-auto">
+              Check back soon for new items
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {auctions.map((auction) => (
+              <AuctionCard
+                key={auction.id}
+                id={String(auction.id)}
+                title={auction.title}
+                currentBid={auction.currentBid || auction.startingBid}
+                endTime={auction.endTime ? new Date(auction.endTime) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)}
+                image={auction.image || ''}
+                bidCount={auction.bidCount}
+                onBid={() => handleBid(auction)}
+                onClick={() => console.log('Navigate to auction detail:', auction.id)}
+              />
+            ))}
+          </div>
+        )}
       </main>
 
       <BottomNav />
@@ -178,7 +165,7 @@ export default function Browse() {
         <BidDialog
           open={bidDialogOpen}
           onOpenChange={setBidDialogOpen}
-          currentBid={selectedAuction.currentBid}
+          currentBid={selectedAuction.currentBid || selectedAuction.startingBid}
           onSubmit={handleBidSubmit}
         />
       )}

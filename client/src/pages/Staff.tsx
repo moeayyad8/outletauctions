@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useUpload } from '@/hooks/use-upload';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck } from 'lucide-react';
+import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel } from 'lucide-react';
 import JsBarcode from 'jsbarcode';
 import type { Auction, Tag as TagType } from '@shared/schema';
 
@@ -186,6 +186,27 @@ export default function Staff() {
 
   const handleDeleteAuction = (id: number) => {
     deleteAuctionMutation.mutate(id);
+  };
+
+  const sendToAuctionMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await apiRequest('PATCH', `/api/staff/auctions/${id}/status`, {
+        status: 'active',
+        durationDays: 7,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/staff/auctions'] });
+      toast({ title: 'Item is now live!' });
+    },
+    onError: () => {
+      toast({ title: 'Failed to send to auction', variant: 'destructive' });
+    },
+  });
+
+  const handleSendToAuction = (id: number) => {
+    sendToAuctionMutation.mutate(id);
   };
 
   const handleScan = () => {
@@ -532,7 +553,11 @@ export default function Staff() {
               {auctions.map((auction) => (
                 <div 
                   key={auction.id} 
-                  className="flex items-center gap-3 p-3 rounded-xl bg-muted/50 hover:bg-muted/80 transition-colors"
+                  className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${
+                    auction.status === 'active' 
+                      ? 'bg-green-500/10 border border-green-500/30' 
+                      : 'bg-muted/50 hover:bg-muted/80'
+                  }`}
                 >
                   <div className="w-14 h-14 rounded-lg bg-background flex items-center justify-center shrink-0 overflow-hidden">
                     {auction.image ? (
@@ -542,8 +567,15 @@ export default function Staff() {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{auction.title}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <p className="font-medium text-sm truncate">{auction.title}</p>
+                      {auction.status === 'active' && (
+                        <Badge variant="default" className="text-[10px] px-1.5 py-0 bg-green-600">
+                          Live
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span className="font-semibold text-foreground">
                         {auction.retailPrice ? `$${(auction.retailPrice / 100).toFixed(2)}` : '—'}
                       </span>
@@ -551,6 +583,19 @@ export default function Staff() {
                     </div>
                   </div>
                   <div className="flex items-center gap-0.5">
+                    {auction.status === 'draft' && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="h-8 px-2 text-xs"
+                        onClick={() => handleSendToAuction(auction.id)}
+                        disabled={sendToAuctionMutation.isPending}
+                        data-testid={`button-auction-${auction.id}`}
+                      >
+                        <Gavel className="w-3 h-3 mr-1" />
+                        Go Live
+                      </Button>
+                    )}
                     {auction.internalCode && (
                       <Button
                         variant="ghost"

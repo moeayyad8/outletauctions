@@ -227,6 +227,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Public endpoint - get active auctions for homepage
+  app.get('/api/auctions', async (req, res) => {
+    try {
+      const activeAuctions = await storage.getActiveAuctions();
+      res.json(activeAuctions);
+    } catch (error) {
+      console.error("Error fetching active auctions:", error);
+      res.status(500).json({ message: "Failed to fetch auctions" });
+    }
+  });
+
+  // Update auction status (send to auction)
+  app.patch('/api/staff/auctions/:id/status', async (req, res) => {
+    try {
+      const auctionId = parseInt(req.params.id);
+      const { status, durationDays } = req.body;
+      
+      if (isNaN(auctionId)) {
+        return res.status(400).json({ message: "Invalid auction ID" });
+      }
+      
+      if (!status || !['draft', 'active', 'ended', 'sold'].includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+      
+      let endTime: Date | undefined;
+      if (status === 'active' && durationDays) {
+        endTime = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000);
+      }
+      
+      const updated = await storage.updateAuctionStatus(auctionId, status, endTime);
+      if (!updated) {
+        return res.status(404).json({ message: "Auction not found" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating auction status:", error);
+      res.status(500).json({ message: "Failed to update auction status" });
+    }
+  });
+
   app.get('/api/staff/auctions/search/by-tags', async (req, res) => {
     try {
       const { tagIds } = req.query;
