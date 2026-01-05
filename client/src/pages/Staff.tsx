@@ -4,7 +4,8 @@ import { apiRequest, queryClient } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowRight, ArrowDown, Package, Clock, CheckCircle } from 'lucide-react';
+import { useUpload } from '@/hooks/use-upload';
+import { ArrowDown, Clock, CheckCircle, Camera, X } from 'lucide-react';
 import type { Auction } from '@shared/schema';
 
 interface ScanResult {
@@ -29,11 +30,29 @@ export default function Staff() {
   const [code, setCode] = useState('');
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [enrichmentQueue, setEnrichmentQueue] = useState<EnrichmentQueueItem[]>([]);
+  const [customImage, setCustomImage] = useState<string | null>(null);
   const { toast } = useToast();
+  
+  const { uploadFile, isUploading } = useUpload({
+    onSuccess: (response) => {
+      setCustomImage(response.objectPath);
+      toast({ title: 'Image uploaded!' });
+    },
+    onError: () => {
+      toast({ title: 'Failed to upload image', variant: 'destructive' });
+    }
+  });
 
   const { data: auctions = [] } = useQuery<Auction[]>({
     queryKey: ['/api/staff/auctions'],
   });
+  
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      await uploadFile(file);
+    }
+  };
 
   const scanMutation = useMutation({
     mutationFn: async (codeToScan: string) => {
@@ -74,7 +93,7 @@ export default function Staff() {
         upc: result.code,
         title: result.title,
         description: result.brand ? `Brand: ${result.brand}` : null,
-        image: result.image,
+        image: customImage || result.image,
         retailPrice: result.highestPrice ? Math.round(result.highestPrice * 100) : null,
         startingBid: 1,
         status: 'draft',
@@ -85,6 +104,7 @@ export default function Staff() {
       queryClient.invalidateQueries({ queryKey: ['/api/staff/auctions'] });
       setScanResult(null);
       setCode('');
+      setCustomImage(null);
       toast({ title: 'Auction created!' });
     },
     onError: () => {
@@ -198,7 +218,7 @@ export default function Staff() {
       </div>
 
       {scanResult && scanResult.lookupStatus === "SUCCESS" && (
-        <div className="border border-green-500 p-4 rounded space-y-2 bg-green-50 dark:bg-green-950">
+        <div className="border border-green-500 p-4 rounded space-y-3 bg-green-50 dark:bg-green-950">
           <div className="flex items-center gap-2">
             <span className="px-2 py-1 text-xs font-bold bg-green-500 text-white rounded">{scanResult.codeType}</span>
             <span className="text-green-700 dark:text-green-300 font-medium">Ready to List</span>
@@ -208,9 +228,58 @@ export default function Staff() {
           <p><strong>Brand:</strong> {scanResult.brand || 'N/A'}</p>
           <p><strong>Category:</strong> {scanResult.category || 'N/A'}</p>
           <p><strong>Highest Price:</strong> {scanResult.highestPrice ? `$${scanResult.highestPrice.toFixed(2)}` : 'N/A'}</p>
-          {scanResult.image && (
-            <img src={scanResult.image} alt={scanResult.title} className="w-32 h-32 object-contain bg-white rounded" />
-          )}
+          
+          <div className="flex items-start gap-4">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Product Image:</p>
+              {(customImage || scanResult.image) ? (
+                <div className="relative">
+                  <img 
+                    src={customImage || scanResult.image || ''} 
+                    alt={scanResult.title} 
+                    className="w-32 h-32 object-contain bg-white rounded border"
+                  />
+                  {customImage && (
+                    <button 
+                      onClick={() => setCustomImage(null)}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"
+                      data-testid="button-remove-image"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="w-32 h-32 bg-muted rounded border flex items-center justify-center text-muted-foreground">
+                  No image
+                </div>
+              )}
+            </div>
+            
+            <div className="space-y-2">
+              <p className="text-sm font-medium">
+                {scanResult.image ? 'Replace Image:' : 'Add Image:'}
+              </p>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <div className="flex items-center gap-2 px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 hover:bg-muted transition-colors">
+                  <Camera className="w-4 h-4" />
+                  <span className="text-sm">{isUploading ? 'Uploading...' : 'Upload Photo'}</span>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  disabled={isUploading}
+                  className="hidden"
+                  data-testid="input-image-upload"
+                />
+              </label>
+              {customImage && (
+                <p className="text-xs text-green-600">Custom image set</p>
+              )}
+            </div>
+          </div>
+          
           <Button 
             onClick={handleAddToInventory}
             disabled={createAuctionMutation.isPending}
@@ -222,12 +291,47 @@ export default function Staff() {
       )}
 
       {scanResult && scanResult.lookupStatus === "NOT_FOUND" && (
-        <div className="border border-yellow-500 p-4 rounded space-y-2 bg-yellow-50 dark:bg-yellow-950">
+        <div className="border border-yellow-500 p-4 rounded space-y-3 bg-yellow-50 dark:bg-yellow-950">
           <div className="flex items-center gap-2">
             <span className="px-2 py-1 text-xs font-bold bg-yellow-500 text-white rounded">{scanResult.codeType}</span>
             <span className="text-yellow-700 dark:text-yellow-300 font-medium">Not Found</span>
           </div>
           <p>Code <code>{scanResult.code}</code> not found in product database.</p>
+          
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Add Product Image:</p>
+            <div className="flex items-center gap-3">
+              {customImage ? (
+                <div className="relative">
+                  <img 
+                    src={customImage} 
+                    alt="Custom upload" 
+                    className="w-24 h-24 object-contain bg-white rounded border"
+                  />
+                  <button 
+                    onClick={() => setCustomImage(null)}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : null}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <div className="flex items-center gap-2 px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 hover:bg-muted transition-colors">
+                  <Camera className="w-4 h-4" />
+                  <span className="text-sm">{isUploading ? 'Uploading...' : 'Upload Photo'}</span>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  disabled={isUploading}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          </div>
+          
           <Button 
             variant="outline"
             onClick={() => {
@@ -239,6 +343,7 @@ export default function Staff() {
               }]);
               setScanResult(null);
               setCode('');
+              setCustomImage(null);
               toast({ title: 'Added to enrichment queue' });
             }}
             data-testid="button-add-to-queue"

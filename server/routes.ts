@@ -4,9 +4,11 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { insertBidSchema, insertWatchlistSchema, insertAuctionSchema } from "@shared/schema";
 import { scanCode } from "./upcService";
+import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   await setupAuth(app);
+  registerObjectStorageRoutes(app);
 
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
