@@ -1,6 +1,6 @@
 import { users, bids, watchlist, auctions, type User, type UpsertUser, type Bid, type InsertBid, type Watchlist, type InsertWatchlist, type Auction, type InsertAuction } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, like } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -13,6 +13,7 @@ export interface IStorage {
   createAuction(auction: InsertAuction): Promise<Auction>;
   getAllAuctions(): Promise<Auction[]>;
   getAuction(id: number): Promise<Auction | undefined>;
+  getNextInternalCode(): Promise<string>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -72,6 +73,27 @@ export class DatabaseStorage implements IStorage {
   async getAuction(id: number): Promise<Auction | undefined> {
     const [auction] = await db.select().from(auctions).where(eq(auctions.id, id));
     return auction;
+  }
+
+  async getNextInternalCode(): Promise<string> {
+    const oaAuctions = await db
+      .select({ upc: auctions.upc })
+      .from(auctions)
+      .where(like(auctions.upc, 'OA%'));
+    
+    let maxNumber = 0;
+    for (const auction of oaAuctions) {
+      if (auction.upc) {
+        const numPart = auction.upc.replace('OA', '');
+        const num = parseInt(numPart, 10);
+        if (!isNaN(num) && num > maxNumber) {
+          maxNumber = num;
+        }
+      }
+    }
+    
+    const nextNumber = maxNumber + 1;
+    return `OA${nextNumber.toString().padStart(9, '0')}`;
   }
 }
 

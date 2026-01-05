@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useUpload } from '@/hooks/use-upload';
-import { ArrowDown, Clock, CheckCircle, Camera, X } from 'lucide-react';
+import { ArrowDown, Clock, CheckCircle, Camera, X, Plus } from 'lucide-react';
 import type { Auction } from '@shared/schema';
 
 interface ScanResult {
@@ -78,6 +78,32 @@ export default function Staff() {
     onError: () => {
       setScanResult(null);
       toast({ title: 'Scan failed', variant: 'destructive' });
+    },
+  });
+
+  const generateInternalCodeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/staff/next-internal-code');
+      if (!res.ok) throw new Error('Failed to get internal code');
+      return res.json();
+    },
+    onSuccess: (data: { code: string }) => {
+      setScanResult({
+        code: data.code,
+        codeType: "UNKNOWN",
+        lookupStatus: "NEEDS_ENRICHMENT",
+        title: `Internal Product – ${data.code}`,
+        image: null,
+        brand: null,
+        category: null,
+        highestPrice: null
+      });
+      setCustomImage(null);
+      setCode('');
+      toast({ title: `Generated internal code: ${data.code}` });
+    },
+    onError: () => {
+      toast({ title: 'Failed to generate code', variant: 'destructive' });
     },
   });
 
@@ -206,9 +232,21 @@ export default function Staff() {
             {scanMutation.isPending ? 'Scanning...' : 'Scan'}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          UPC (12 digits) and EAN (13 digits) lookup automatically. ASIN and unknown codes go to enrichment queue.
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="text-xs text-muted-foreground flex-1">
+            UPC (12 digits) and EAN (13 digits) lookup automatically. ASIN and unknown codes go to enrichment queue.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => generateInternalCodeMutation.mutate()}
+            disabled={generateInternalCodeMutation.isPending}
+            data-testid="button-generate-internal"
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            {generateInternalCodeMutation.isPending ? 'Generating...' : 'Internal Code'}
+          </Button>
+        </div>
       </div>
 
       {scanResult && scanResult.lookupStatus === "SUCCESS" && (

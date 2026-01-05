@@ -141,6 +141,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/staff/next-internal-code', async (req, res) => {
+    try {
+      const nextCode = await storage.getNextInternalCode();
+      res.json({ code: nextCode });
+    } catch (error) {
+      console.error("Error getting next internal code:", error);
+      res.status(500).json({ message: "Failed to get next internal code" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
