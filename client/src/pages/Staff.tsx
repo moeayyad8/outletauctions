@@ -66,14 +66,22 @@ export default function Staff() {
 
   useEffect(() => {
     if (showBarcodeDialog && barcodeRef.current && barcodeValue) {
-      JsBarcode(barcodeRef.current, barcodeValue, {
-        format: 'CODE128',
-        width: 2,
-        height: 80,
-        displayValue: true,
-        fontSize: 16,
-        margin: 10,
-      });
+      setTimeout(() => {
+        if (barcodeRef.current) {
+          try {
+            JsBarcode(barcodeRef.current, barcodeValue, {
+              format: 'CODE128',
+              width: 2,
+              height: 80,
+              displayValue: true,
+              fontSize: 16,
+              margin: 10,
+            });
+          } catch (e) {
+            console.error('Barcode generation failed:', e);
+          }
+        }
+      }, 100);
     }
   }, [showBarcodeDialog, barcodeValue]);
 
@@ -106,39 +114,55 @@ export default function Staff() {
 
   const printBarcode = () => {
     const printWindow = window.open('', '_blank');
-    if (printWindow && barcodeRef.current) {
-      const svgData = new XMLSerializer().serializeToString(barcodeRef.current);
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Barcode - ${barcodeValue}</title>
-          <style>
-            body { 
-              margin: 0; 
-              padding: 20px; 
-              display: flex; 
-              justify-content: center; 
-              align-items: center;
-              min-height: 100vh;
-            }
-            @media print {
-              body { padding: 0; }
-            }
-          </style>
-        </head>
-        <body>
-          ${svgData}
-          <script>
-            window.onload = function() {
-              window.print();
-              window.close();
-            };
-          </script>
-        </body>
-        </html>
-      `);
-      printWindow.document.close();
+    if (printWindow) {
+      const tempSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      try {
+        JsBarcode(tempSvg, barcodeValue, {
+          format: 'CODE128',
+          width: 2,
+          height: 80,
+          displayValue: true,
+          fontSize: 16,
+          margin: 10,
+        });
+        const svgData = new XMLSerializer().serializeToString(tempSvg);
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Barcode - ${barcodeValue}</title>
+            <style>
+              body { 
+                margin: 0; 
+                padding: 20px; 
+                display: flex; 
+                flex-direction: column;
+                justify-content: center; 
+                align-items: center;
+                min-height: 100vh;
+              }
+              @media print {
+                body { padding: 10px; }
+              }
+            </style>
+          </head>
+          <body>
+            ${svgData}
+            <script>
+              window.onload = function() {
+                window.print();
+                window.close();
+              };
+            </script>
+          </body>
+          </html>
+        `);
+        printWindow.document.close();
+      } catch (e) {
+        console.error('Print failed:', e);
+        printWindow.close();
+        toast({ title: 'Failed to generate barcode', variant: 'destructive' });
+      }
     }
   };
   
