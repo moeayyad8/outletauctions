@@ -77,6 +77,7 @@ export type Watchlist = typeof watchlist.$inferSelect;
 // Auctions table - platform inventory
 export const auctions = pgTable("auctions", {
   id: serial("id").primaryKey(),
+  internalCode: varchar("internal_code", { length: 20 }),
   upc: varchar("upc", { length: 20 }),
   title: varchar("title", { length: 500 }).notNull(),
   description: text("description"),

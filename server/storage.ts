@@ -68,7 +68,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAuction(auction: InsertAuction): Promise<Auction> {
-    const [newAuction] = await db.insert(auctions).values(auction).returning();
+    const internalCode = await this.getNextInternalCode();
+    const [newAuction] = await db.insert(auctions).values({
+      ...auction,
+      internalCode,
+    }).returning();
     return newAuction;
   }
 
@@ -83,14 +87,14 @@ export class DatabaseStorage implements IStorage {
 
   async getNextInternalCode(): Promise<string> {
     const oaAuctions = await db
-      .select({ upc: auctions.upc })
+      .select({ internalCode: auctions.internalCode })
       .from(auctions)
-      .where(like(auctions.upc, 'OA%'));
+      .where(like(auctions.internalCode, 'OA%'));
     
     let maxNumber = 0;
     for (const auction of oaAuctions) {
-      if (auction.upc) {
-        const numPart = auction.upc.replace('OA', '');
+      if (auction.internalCode) {
+        const numPart = auction.internalCode.replace('OA', '');
         const num = parseInt(numPart, 10);
         if (!isNaN(num) && num > maxNumber) {
           maxNumber = num;

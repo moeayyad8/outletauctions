@@ -765,12 +765,30 @@ export default function Staff() {
           <div className="space-y-2">
             {auctions.map((auction) => (
               <div key={auction.id} className="border p-2 rounded text-sm">
-                <p><strong>#{auction.id}</strong> - {auction.title}</p>
-                <p className="text-muted-foreground">
-                  Retail: {auction.retailPrice ? `$${(auction.retailPrice / 100).toFixed(2)}` : 'N/A'} | 
-                  Status: {auction.status} | 
-                  Code: {auction.upc || 'N/A'}
-                </p>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate"><strong>#{auction.id}</strong> - {auction.title}</p>
+                    <p className="text-muted-foreground">
+                      Retail: {auction.retailPrice ? `$${(auction.retailPrice / 100).toFixed(2)}` : 'N/A'} | 
+                      Status: {auction.status} | 
+                      Code: {auction.upc || 'N/A'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="text-xs font-mono text-muted-foreground">{auction.internalCode || '—'}</span>
+                    {auction.internalCode && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => handlePrintBarcode(auction.internalCode!)}
+                        data-testid={`button-print-${auction.id}`}
+                      >
+                        <Printer className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </div>
             ))}
           </div>
