@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useUpload } from '@/hooks/use-upload';
-import { ArrowDown, Clock, CheckCircle, Camera, X, Plus } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ArrowDown, Clock, CheckCircle, Camera, X, Plus, Printer, XCircle } from 'lucide-react';
+import JsBarcode from 'jsbarcode';
 import type { Auction } from '@shared/schema';
 
 interface ScanResult {
@@ -31,7 +33,73 @@ export default function Staff() {
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [enrichmentQueue, setEnrichmentQueue] = useState<EnrichmentQueueItem[]>([]);
   const [customImage, setCustomImage] = useState<string | null>(null);
+  const [showBarcodeDialog, setShowBarcodeDialog] = useState(false);
+  const [barcodeValue, setBarcodeValue] = useState('');
+  const barcodeRef = useRef<SVGSVGElement>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (showBarcodeDialog && barcodeRef.current && barcodeValue) {
+      JsBarcode(barcodeRef.current, barcodeValue, {
+        format: 'CODE128',
+        width: 2,
+        height: 80,
+        displayValue: true,
+        fontSize: 16,
+        margin: 10,
+      });
+    }
+  }, [showBarcodeDialog, barcodeValue]);
+
+  const handleCancelScan = () => {
+    setScanResult(null);
+    setCustomImage(null);
+    setCode('');
+    toast({ title: 'Scan cancelled' });
+  };
+
+  const handlePrintBarcode = (codeValue: string) => {
+    setBarcodeValue(codeValue);
+    setShowBarcodeDialog(true);
+  };
+
+  const printBarcode = () => {
+    const printWindow = window.open('', '_blank');
+    if (printWindow && barcodeRef.current) {
+      const svgData = new XMLSerializer().serializeToString(barcodeRef.current);
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Barcode - ${barcodeValue}</title>
+          <style>
+            body { 
+              margin: 0; 
+              padding: 20px; 
+              display: flex; 
+              justify-content: center; 
+              align-items: center;
+              min-height: 100vh;
+            }
+            @media print {
+              body { padding: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          ${svgData}
+          <script>
+            window.onload = function() {
+              window.print();
+              window.close();
+            };
+          </script>
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  };
   
   const { uploadFile, isUploading } = useUpload({
     onSuccess: (response) => {
@@ -312,13 +380,31 @@ export default function Staff() {
             </div>
           </div>
           
-          <Button 
-            onClick={handleAddToInventory}
-            disabled={createAuctionMutation.isPending}
-            data-testid="button-add-inventory"
-          >
-            {createAuctionMutation.isPending ? 'Adding...' : 'Add to Inventory'}
-          </Button>
+          <div className="flex gap-2 flex-wrap">
+            <Button 
+              onClick={handleAddToInventory}
+              disabled={createAuctionMutation.isPending}
+              data-testid="button-add-inventory"
+            >
+              {createAuctionMutation.isPending ? 'Adding...' : 'Add to Inventory'}
+            </Button>
+            <Button 
+              variant="outline"
+              onClick={() => handlePrintBarcode(scanResult.code)}
+              data-testid="button-print-barcode"
+            >
+              <Printer className="w-4 h-4 mr-1" />
+              Print Barcode
+            </Button>
+            <Button 
+              variant="ghost"
+              onClick={handleCancelScan}
+              data-testid="button-cancel-scan"
+            >
+              <XCircle className="w-4 h-4 mr-1" />
+              Cancel
+            </Button>
+          </div>
         </div>
       )}
 
@@ -364,24 +450,42 @@ export default function Staff() {
             </div>
           </div>
           
-          <Button 
-            variant="outline"
-            onClick={() => {
-              setEnrichmentQueue(prev => [...prev, {
-                code: scanResult.code,
-                codeType: scanResult.codeType,
-                title: scanResult.title,
-                scannedAt: new Date()
-              }]);
-              setScanResult(null);
-              setCode('');
-              setCustomImage(null);
-              toast({ title: 'Added to enrichment queue' });
-            }}
-            data-testid="button-add-to-queue"
-          >
-            Add to Enrichment Queue
-          </Button>
+          <div className="flex gap-2 flex-wrap">
+            <Button 
+              variant="outline"
+              onClick={() => {
+                setEnrichmentQueue(prev => [...prev, {
+                  code: scanResult.code,
+                  codeType: scanResult.codeType,
+                  title: scanResult.title,
+                  scannedAt: new Date()
+                }]);
+                setScanResult(null);
+                setCode('');
+                setCustomImage(null);
+                toast({ title: 'Added to enrichment queue' });
+              }}
+              data-testid="button-add-to-queue"
+            >
+              Add to Enrichment Queue
+            </Button>
+            <Button 
+              variant="outline"
+              onClick={() => handlePrintBarcode(scanResult.code)}
+              data-testid="button-print-barcode-notfound"
+            >
+              <Printer className="w-4 h-4 mr-1" />
+              Print Barcode
+            </Button>
+            <Button 
+              variant="ghost"
+              onClick={handleCancelScan}
+              data-testid="button-cancel-scan-notfound"
+            >
+              <XCircle className="w-4 h-4 mr-1" />
+              Cancel
+            </Button>
+          </div>
         </div>
       )}
 
@@ -436,24 +540,42 @@ export default function Staff() {
             )}
           </div>
           
-          <Button 
-            variant="outline"
-            onClick={() => {
-              setEnrichmentQueue(prev => [...prev, {
-                code: scanResult.code,
-                codeType: scanResult.codeType,
-                title: customImage ? `[Has Image] ${scanResult.title}` : scanResult.title,
-                scannedAt: new Date()
-              }]);
-              setScanResult(null);
-              setCode('');
-              setCustomImage(null);
-              toast({ title: 'Added to enrichment queue' });
-            }}
-            data-testid="button-asin-to-queue"
-          >
-            Add to Enrichment Queue
-          </Button>
+          <div className="flex gap-2 flex-wrap">
+            <Button 
+              variant="outline"
+              onClick={() => {
+                setEnrichmentQueue(prev => [...prev, {
+                  code: scanResult.code,
+                  codeType: scanResult.codeType,
+                  title: customImage ? `[Has Image] ${scanResult.title}` : scanResult.title,
+                  scannedAt: new Date()
+                }]);
+                setScanResult(null);
+                setCode('');
+                setCustomImage(null);
+                toast({ title: 'Added to enrichment queue' });
+              }}
+              data-testid="button-asin-to-queue"
+            >
+              Add to Enrichment Queue
+            </Button>
+            <Button 
+              variant="outline"
+              onClick={() => handlePrintBarcode(scanResult.code)}
+              data-testid="button-print-barcode-enrichment"
+            >
+              <Printer className="w-4 h-4 mr-1" />
+              Print Barcode
+            </Button>
+            <Button 
+              variant="ghost"
+              onClick={handleCancelScan}
+              data-testid="button-cancel-scan-enrichment"
+            >
+              <XCircle className="w-4 h-4 mr-1" />
+              Cancel
+            </Button>
+          </div>
         </div>
       )}
 
@@ -503,6 +625,26 @@ export default function Staff() {
           </div>
         )}
       </div>
+
+      <Dialog open={showBarcodeDialog} onOpenChange={setShowBarcodeDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Print Barcode</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center space-y-4">
+            <svg ref={barcodeRef} data-testid="barcode-svg"></svg>
+            <div className="flex gap-2">
+              <Button onClick={printBarcode} data-testid="button-confirm-print">
+                <Printer className="w-4 h-4 mr-1" />
+                Print
+              </Button>
+              <Button variant="outline" onClick={() => setShowBarcodeDialog(false)} data-testid="button-close-barcode">
+                Close
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
