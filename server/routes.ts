@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { insertBidSchema, insertWatchlistSchema, insertAuctionSchema } from "@shared/schema";
+import { insertBidSchema, insertWatchlistSchema, insertAuctionSchema, insertTagSchema } from "@shared/schema";
 import { scanCode } from "./upcService";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 
@@ -148,6 +148,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error getting next internal code:", error);
       res.status(500).json({ message: "Failed to get next internal code" });
+    }
+  });
+
+  // Tags management
+  app.get('/api/tags', async (req, res) => {
+    try {
+      const { type } = req.query;
+      const tags = type ? await storage.getTagsByType(type as string) : await storage.getAllTags();
+      res.json(tags);
+    } catch (error) {
+      console.error("Error fetching tags:", error);
+      res.status(500).json({ message: "Failed to fetch tags" });
+    }
+  });
+
+  app.post('/api/tags', async (req, res) => {
+    try {
+      const tagData = insertTagSchema.parse(req.body);
+      const tag = await storage.createTag(tagData);
+      res.json(tag);
+    } catch (error) {
+      console.error("Error creating tag:", error);
+      res.status(400).json({ message: "Failed to create tag" });
+    }
+  });
+
+  app.post('/api/staff/auctions/:id/tags', async (req, res) => {
+    try {
+      const auctionId = parseInt(req.params.id);
+      const { tagIds } = req.body;
+      
+      if (isNaN(auctionId)) {
+        return res.status(400).json({ message: "Invalid auction ID" });
+      }
+      
+      if (!Array.isArray(tagIds)) {
+        return res.status(400).json({ message: "tagIds must be an array" });
+      }
+      
+      await storage.attachTagsToAuction(auctionId, tagIds);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error attaching tags:", error);
+      res.status(400).json({ message: "Failed to attach tags" });
+    }
+  });
+
+  app.get('/api/staff/auctions/:id/tags', async (req, res) => {
+    try {
+      const auctionId = parseInt(req.params.id);
+      
+      if (isNaN(auctionId)) {
+        return res.status(400).json({ message: "Invalid auction ID" });
+      }
+      
+      const tags = await storage.getAuctionTags(auctionId);
+      res.json(tags);
+    } catch (error) {
+      console.error("Error fetching auction tags:", error);
+      res.status(500).json({ message: "Failed to fetch auction tags" });
+    }
+  });
+
+  app.get('/api/staff/auctions/search/by-tags', async (req, res) => {
+    try {
+      const { tagIds } = req.query;
+      
+      if (!tagIds) {
+        return res.status(400).json({ message: "tagIds query parameter required" });
+      }
+      
+      const tagIdArray = (tagIds as string).split(',').map(id => parseInt(id)).filter(id => !isNaN(id));
+      const auctions = await storage.searchAuctionsByTags(tagIdArray);
+      res.json(auctions);
+    } catch (error) {
+      console.error("Error searching auctions by tags:", error);
+      res.status(500).json({ message: "Failed to search auctions" });
     }
   });
 
