@@ -171,6 +171,20 @@ export default function Staff() {
     },
   });
 
+  const deleteAuctionMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest('DELETE', `/api/staff/auctions/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/staff/auctions'] });
+      toast({ title: 'Item deleted' });
+    },
+  });
+
+  const handleDeleteAuction = (id: number) => {
+    deleteAuctionMutation.mutate(id);
+  };
+
   const handleScan = () => {
     if (code.trim()) {
       scanMutation.mutate(code.trim());
@@ -506,16 +520,26 @@ export default function Staff() {
                           <span className="font-mono">{auction.internalCode || auction.upc}</span>
                         </div>
                       </div>
-                      {auction.internalCode && (
+                      <div className="flex items-center gap-1">
+                        {auction.internalCode && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handlePrintBarcode(auction.internalCode!)}
+                            data-testid={`button-print-${auction.id}`}
+                          >
+                            <Printer className="w-4 h-4" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handlePrintBarcode(auction.internalCode!)}
-                          data-testid={`button-print-${auction.id}`}
+                          onClick={() => handleDeleteAuction(auction.id)}
+                          data-testid={`button-delete-${auction.id}`}
                         >
-                          <Printer className="w-4 h-4" />
+                          <X className="w-4 h-4 text-destructive" />
                         </Button>
-                      )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

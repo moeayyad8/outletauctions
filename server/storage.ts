@@ -20,6 +20,7 @@ export interface IStorage {
   attachTagsToAuction(auctionId: number, tagIds: number[]): Promise<void>;
   getAuctionTags(auctionId: number): Promise<Tag[]>;
   searchAuctionsByTags(tagIds: number[]): Promise<Auction[]>;
+  deleteAuction(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -145,6 +146,13 @@ export class DatabaseStorage implements IStorage {
     if (auctionIds.length === 0) return [];
     
     return db.select().from(auctions).where(inArray(auctions.id, auctionIds));
+  }
+
+  async deleteAuction(id: number): Promise<void> {
+    await db.delete(auctionTags).where(eq(auctionTags.auctionId, id));
+    await db.delete(bids).where(eq(bids.auctionId, id));
+    await db.delete(watchlist).where(eq(watchlist.auctionId, id));
+    await db.delete(auctions).where(eq(auctions.id, id));
   }
 }
 

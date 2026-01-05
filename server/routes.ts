@@ -211,6 +211,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete('/api/staff/auctions/:id', async (req, res) => {
+    try {
+      const auctionId = parseInt(req.params.id);
+      
+      if (isNaN(auctionId)) {
+        return res.status(400).json({ message: "Invalid auction ID" });
+      }
+      
+      await storage.deleteAuction(auctionId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting auction:", error);
+      res.status(500).json({ message: "Failed to delete auction" });
+    }
+  });
+
   app.get('/api/staff/auctions/search/by-tags', async (req, res) => {
     try {
       const { tagIds } = req.query;
