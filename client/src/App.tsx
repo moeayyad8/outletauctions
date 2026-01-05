@@ -8,6 +8,7 @@ import AuctionDetail from "@/pages/AuctionDetail";
 import Search from "@/pages/Search";
 import Profile from "@/pages/Profile";
 import Staff from "@/pages/Staff";
+import RetailValueFinder from "@/pages/RetailValueFinder";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -18,6 +19,7 @@ function Router() {
       <Route path="/search" component={Search} />
       <Route path="/profile" component={Profile} />
       <Route path="/staff" component={Staff} />
+      <Route path="/value-finder" component={RetailValueFinder} />
       <Route component={NotFound} />
     </Switch>
   );
