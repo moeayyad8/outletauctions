@@ -24,7 +24,7 @@ export default function RetailValueFinder() {
 
   const scanMutation = useMutation({
     mutationFn: async (scanCode: string) => {
-      const response = await apiRequest("POST", "/api/staff/scan", { code: scanCode });
+      const response = await apiRequest("POST", "/api/scan", { code: scanCode });
       return response.json();
     },
     onSuccess: (data) => {
