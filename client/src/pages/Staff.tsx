@@ -62,6 +62,7 @@ export default function Staff() {
     onSuccess: (data: ScanResult) => {
       setScanResult(data);
       setCustomImage(null);
+      setCode('');
       
       if (data.lookupStatus === "SUCCESS") {
         toast({ title: `${data.codeType} found! Ready to list.` });
