@@ -4,6 +4,7 @@ import { apiRequest, queryClient } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
+import { ArrowRight, ArrowDown, Package, Clock, CheckCircle } from 'lucide-react';
 import type { Auction } from '@shared/schema';
 
 interface ScanResult {
@@ -110,6 +111,68 @@ export default function Staff() {
   return (
     <div className="p-4 max-w-2xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold">Staff Panel - Scanner</h1>
+      
+      {/* Visual Flow Diagram */}
+      <div className="border rounded-lg p-4 bg-muted/30">
+        <h2 className="text-sm font-semibold mb-3 text-muted-foreground">Scan Flow</h2>
+        <div className="flex flex-col gap-3">
+          {/* Input Row */}
+          <div className="flex items-center justify-center">
+            <div className="px-3 py-2 bg-blue-100 dark:bg-blue-900 border border-blue-300 dark:border-blue-700 rounded-lg text-center">
+              <p className="font-medium text-blue-800 dark:text-blue-200">Scan Input</p>
+              <p className="text-xs text-blue-600 dark:text-blue-400">Any barcode</p>
+            </div>
+          </div>
+          
+          <div className="flex justify-center">
+            <ArrowDown className="w-5 h-5 text-muted-foreground" />
+          </div>
+          
+          {/* Detection Row */}
+          <div className="grid grid-cols-4 gap-2 text-center text-xs">
+            <div className={`p-2 rounded-lg border-2 ${scanResult?.codeType === 'UPC' ? 'border-green-500 bg-green-50 dark:bg-green-950' : 'border-muted bg-background'}`}>
+              <p className="font-bold">UPC</p>
+              <p className="text-muted-foreground">12 digits</p>
+            </div>
+            <div className={`p-2 rounded-lg border-2 ${scanResult?.codeType === 'EAN' ? 'border-green-500 bg-green-50 dark:bg-green-950' : 'border-muted bg-background'}`}>
+              <p className="font-bold">EAN</p>
+              <p className="text-muted-foreground">13 digits</p>
+            </div>
+            <div className={`p-2 rounded-lg border-2 ${scanResult?.codeType === 'ASIN' ? 'border-orange-500 bg-orange-50 dark:bg-orange-950' : 'border-muted bg-background'}`}>
+              <p className="font-bold">ASIN</p>
+              <p className="text-muted-foreground">10 alphanum</p>
+            </div>
+            <div className={`p-2 rounded-lg border-2 ${scanResult?.codeType === 'UNKNOWN' ? 'border-orange-500 bg-orange-50 dark:bg-orange-950' : 'border-muted bg-background'}`}>
+              <p className="font-bold">Other</p>
+              <p className="text-muted-foreground">Unknown</p>
+            </div>
+          </div>
+          
+          <div className="flex justify-center">
+            <ArrowDown className="w-5 h-5 text-muted-foreground" />
+          </div>
+          
+          {/* Destination Row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className={`p-3 rounded-lg border-2 flex items-center gap-2 ${scanResult?.lookupStatus === 'SUCCESS' ? 'border-green-500 bg-green-100 dark:bg-green-900' : 'border-green-300 dark:border-green-800 bg-green-50/50 dark:bg-green-950/50'}`}>
+              <CheckCircle className={`w-5 h-5 ${scanResult?.lookupStatus === 'SUCCESS' ? 'text-green-600' : 'text-green-400'}`} />
+              <div>
+                <p className="font-semibold text-green-800 dark:text-green-200">Ready to List</p>
+                <p className="text-xs text-green-600 dark:text-green-400">UPC/EAN found</p>
+                <p className="text-xs font-bold text-green-700 dark:text-green-300">{auctions.length} in inventory</p>
+              </div>
+            </div>
+            <div className={`p-3 rounded-lg border-2 flex items-center gap-2 ${scanResult?.lookupStatus === 'NEEDS_ENRICHMENT' || enrichmentQueue.length > 0 ? 'border-orange-500 bg-orange-100 dark:bg-orange-900' : 'border-orange-300 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/50'}`}>
+              <Clock className={`w-5 h-5 ${enrichmentQueue.length > 0 ? 'text-orange-600' : 'text-orange-400'}`} />
+              <div>
+                <p className="font-semibold text-orange-800 dark:text-orange-200">Enrichment Queue</p>
+                <p className="text-xs text-orange-600 dark:text-orange-400">ASIN/Unknown/Not found</p>
+                <p className="text-xs font-bold text-orange-700 dark:text-orange-300">{enrichmentQueue.length} pending</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       
       <div className="space-y-2">
         <label className="text-sm font-medium">Scan Code (UPC/EAN/ASIN):</label>
