@@ -3,12 +3,13 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useUpload } from '@/hooks/use-upload';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ArrowDown, Clock, CheckCircle, Camera, X, Plus, Printer, XCircle } from 'lucide-react';
+import { ArrowDown, Clock, CheckCircle, Camera, X, Plus, Printer, XCircle, Tag, MapPin, FolderOpen } from 'lucide-react';
 import JsBarcode from 'jsbarcode';
-import type { Auction } from '@shared/schema';
+import type { Auction, Tag as TagType } from '@shared/schema';
 
 interface ScanResult {
   code: string;
@@ -35,8 +36,33 @@ export default function Staff() {
   const [customImage, setCustomImage] = useState<string | null>(null);
   const [showBarcodeDialog, setShowBarcodeDialog] = useState(false);
   const [barcodeValue, setBarcodeValue] = useState('');
+  const [selectedTags, setSelectedTags] = useState<number[]>([]);
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagType, setNewTagType] = useState<'location' | 'category'>('category');
+  const [filterTagIds, setFilterTagIds] = useState<number[]>([]);
   const barcodeRef = useRef<SVGSVGElement>(null);
   const { toast } = useToast();
+
+  const { data: allTags = [] } = useQuery<TagType[]>({
+    queryKey: ['/api/tags'],
+  });
+
+  const locationTags = allTags.filter(t => t.type === 'location');
+  const categoryTags = allTags.filter(t => t.type === 'category');
+
+  const createTagMutation = useMutation({
+    mutationFn: async (tag: { name: string; type: string }) => {
+      return apiRequest('POST', '/api/tags', tag);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tags'] });
+      setNewTagName('');
+      toast({ title: 'Tag created!' });
+    },
+    onError: () => {
+      toast({ title: 'Failed to create tag', variant: 'destructive' });
+    },
+  });
 
   useEffect(() => {
     if (showBarcodeDialog && barcodeRef.current && barcodeValue) {
@@ -55,7 +81,22 @@ export default function Staff() {
     setScanResult(null);
     setCustomImage(null);
     setCode('');
+    setSelectedTags([]);
     toast({ title: 'Scan cancelled' });
+  };
+
+  const toggleTag = (tagId: number) => {
+    setSelectedTags(prev => 
+      prev.includes(tagId) 
+        ? prev.filter(id => id !== tagId)
+        : [...prev, tagId]
+    );
+  };
+
+  const handleCreateTag = () => {
+    if (newTagName.trim()) {
+      createTagMutation.mutate({ name: newTagName.trim(), type: newTagType });
+    }
   };
 
   const handlePrintBarcode = (codeValue: string) => {
@@ -186,13 +227,21 @@ export default function Staff() {
         startingBid: 1,
         status: 'draft',
       };
-      return apiRequest('POST', '/api/staff/auctions', auctionData);
+      const response = await apiRequest('POST', '/api/staff/auctions', auctionData);
+      const auction = await response.json();
+      
+      if (selectedTags.length > 0) {
+        await apiRequest('POST', `/api/staff/auctions/${auction.id}/tags`, { tagIds: selectedTags });
+      }
+      
+      return auction;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/staff/auctions'] });
       setScanResult(null);
       setCode('');
       setCustomImage(null);
+      setSelectedTags([]);
       toast({ title: 'Auction created!' });
     },
     onError: () => {
@@ -377,6 +426,84 @@ export default function Staff() {
               {customImage && (
                 <p className="text-xs text-green-600">Custom image set</p>
               )}
+            </div>
+          </div>
+          
+          {/* Tag Selection */}
+          <div className="space-y-3 border-t pt-3">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-blue-500" />
+                <span className="text-sm font-medium">Location Tags</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {locationTags.map(tag => (
+                  <Badge
+                    key={tag.id}
+                    variant={selectedTags.includes(tag.id) ? "default" : "outline"}
+                    className="cursor-pointer"
+                    onClick={() => toggleTag(tag.id)}
+                    data-testid={`tag-location-${tag.id}`}
+                  >
+                    {tag.name}
+                  </Badge>
+                ))}
+                {locationTags.length === 0 && (
+                  <span className="text-xs text-muted-foreground">No location tags yet</span>
+                )}
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <FolderOpen className="w-4 h-4 text-purple-500" />
+                <span className="text-sm font-medium">Category Tags</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {categoryTags.map(tag => (
+                  <Badge
+                    key={tag.id}
+                    variant={selectedTags.includes(tag.id) ? "default" : "outline"}
+                    className="cursor-pointer"
+                    onClick={() => toggleTag(tag.id)}
+                    data-testid={`tag-category-${tag.id}`}
+                  >
+                    {tag.name}
+                  </Badge>
+                ))}
+                {categoryTags.length === 0 && (
+                  <span className="text-xs text-muted-foreground">No category tags yet</span>
+                )}
+              </div>
+            </div>
+            
+            {/* Create new tag */}
+            <div className="flex items-center gap-2 pt-2 border-t">
+              <Input
+                placeholder="New tag name"
+                value={newTagName}
+                onChange={(e) => setNewTagName(e.target.value)}
+                className="flex-1"
+                data-testid="input-new-tag"
+              />
+              <select
+                value={newTagType}
+                onChange={(e) => setNewTagType(e.target.value as 'location' | 'category')}
+                className="border rounded px-2 py-2 text-sm bg-background"
+                data-testid="select-tag-type"
+              >
+                <option value="location">Location</option>
+                <option value="category">Category</option>
+              </select>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleCreateTag}
+                disabled={!newTagName.trim() || createTagMutation.isPending}
+                data-testid="button-create-tag"
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
             </div>
           </div>
           
