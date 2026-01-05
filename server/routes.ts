@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { insertBidSchema, insertWatchlistSchema, insertAuctionSchema } from "@shared/schema";
-import { lookupUPC } from "./upcService";
+import { scanCode } from "./upcService";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   await setupAuth(app);
@@ -82,31 +82,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Staff endpoints - UPC scanning and auction management
-  app.post('/api/staff/scan', async (req, res) => {
+  // Staff endpoints - UPC/EAN/ASIN scanning and auction management
+  app.post('/api/scan', async (req, res) => {
     try {
-      const { upc } = req.body;
+      const { code } = req.body;
       
-      if (!upc || typeof upc !== 'string') {
-        return res.status(400).json({ message: "UPC code is required" });
+      if (!code || typeof code !== 'string') {
+        return res.status(400).json({ message: "Code is required" });
       }
       
-      const cleanUPC = upc.replace(/[^0-9]/g, '');
-      
-      if (cleanUPC.length < 8 || cleanUPC.length > 14) {
-        return res.status(400).json({ message: "Invalid UPC format" });
-      }
-      
-      const product = await lookupUPC(cleanUPC);
-      
-      if (!product) {
-        return res.status(404).json({ message: "Product not found" });
-      }
-      
-      res.json(product);
+      const result = await scanCode(code);
+      res.json(result);
     } catch (error) {
-      console.error("Error scanning UPC:", error);
-      res.status(500).json({ message: "Failed to scan UPC" });
+      console.error("Error scanning code:", error);
+      res.status(500).json({ message: "Failed to scan code" });
     }
   });
 

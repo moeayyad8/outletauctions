@@ -1,94 +1,179 @@
-interface UPCProduct {
-  title: string;
-  description: string;
-  image: string;
-  retailPrice: number | null;
-  upc: string;
-}
+const UPCITEMDB_API_URL = "https://api.upcitemdb.com/prod/trial/lookup";
 
-interface UPCAPIResponse {
+interface ScanResult {
   code: string;
-  total: number;
-  offset: number;
-  items: Array<{
-    ean: string;
-    title: string;
-    description: string;
-    upc: string;
-    brand: string;
-    model: string;
-    color: string;
-    size: string;
-    dimension: string;
-    weight: string;
-    category: string;
-    currency: string;
-    lowest_recorded_price: number;
-    highest_recorded_price: number;
-    images: string[];
-    offers: Array<{
-      merchant: string;
-      domain: string;
-      title: string;
-      currency: string;
-      list_price: string;
-      price: number;
-      shipping: string;
-      condition: string;
-      availability: string;
-      link: string;
-      updated_t: number;
-    }>;
-  }>;
+  codeType: "UPC" | "EAN" | "ASIN" | "UNKNOWN";
+  lookupStatus: "SUCCESS" | "NEEDS_ENRICHMENT" | "NOT_FOUND";
+  title: string;
+  image: string | null;
+  brand: string | null;
+  category: string | null;
+  highestPrice: number | null;
 }
 
-export async function lookupUPC(upc: string): Promise<UPCProduct | null> {
-  const apiKey = process.env.UPCITEMDB_API_KEY;
+function detectCodeType(code: string): "UPC" | "EAN" | "ASIN" | "UNKNOWN" {
+  const cleaned = code.trim();
   
-  let url: string;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  };
+  if (/^\d{12}$/.test(cleaned)) {
+    return "UPC";
+  }
   
-  if (apiKey) {
-    url = `https://api.upcitemdb.com/prod/v1/lookup?upc=${upc}`;
-    headers['user_key'] = apiKey;
-    headers['key_type'] = '3scale';
-  } else {
-    url = `https://api.upcitemdb.com/prod/trial/lookup?upc=${upc}`;
+  if (/^\d{13}$/.test(cleaned)) {
+    return "EAN";
+  }
+  
+  if (/^[A-Z0-9]{10}$/i.test(cleaned)) {
+    return "ASIN";
+  }
+  
+  return "UNKNOWN";
+}
+
+const MARKETING_WORDS = [
+  "new", "official", "authentic", "genuine", "original", "free shipping",
+  "fast shipping", "best seller", "hot sale", "limited edition", "exclusive",
+  "premium", "deluxe", "professional", "ultra", "super", "mega", "extra",
+  "special offer", "sale", "deal", "discount", "cheap", "affordable",
+  "high quality", "top quality", "best quality", "100%", "brand new",
+  "factory sealed", "sealed", "unopened", "mint", "perfect", "excellent"
+];
+
+function cleanTitle(rawTitle: string): string {
+  if (!rawTitle) return "";
+  
+  let title = rawTitle;
+  
+  for (const word of MARKETING_WORDS) {
+    const regex = new RegExp(`\\b${word}\\b`, "gi");
+    title = title.replace(regex, "");
+  }
+  
+  title = title
+    .replace(/\s*[-–—]\s*size\s*:?\s*\w+/gi, "")
+    .replace(/\s*[-–—]\s*color\s*:?\s*\w+/gi, "")
+    .replace(/\s*,\s*size\s*:?\s*\w+/gi, "")
+    .replace(/\s*,\s*color\s*:?\s*\w+/gi, "")
+    .replace(/\s*\(\s*\w+\s*(size|color|pack|count)\s*\)/gi, "")
+    .replace(/\s+/g, " ")
+    .replace(/^[,\s-]+|[,\s-]+$/g, "")
+    .trim();
+  
+  if (title.length > 120) {
+    title = title.substring(0, 117) + "...";
+  }
+  
+  return title;
+}
+
+export async function scanCode(code: string): Promise<ScanResult> {
+  const cleaned = code.trim();
+  const codeType = detectCodeType(cleaned);
+  
+  if (codeType === "ASIN" || codeType === "UNKNOWN") {
+    return {
+      code: cleaned,
+      codeType,
+      lookupStatus: "NEEDS_ENRICHMENT",
+      title: `Unidentified Retail Item – ID ${cleaned}`,
+      image: null,
+      brand: null,
+      category: null,
+      highestPrice: null
+    };
   }
   
   try {
-    const response = await fetch(url, { headers });
+    const apiKey = process.env.UPCITEMDB_API_KEY;
     
+    let response;
+    if (apiKey) {
+      response = await fetch(`https://api.upcitemdb.com/prod/v1/lookup?upc=${cleaned}`, {
+        headers: {
+          "Content-Type": "application/json",
+          "user_key": apiKey,
+          "key_type": "3scale"
+        }
+      });
+    } else {
+      response = await fetch(`${UPCITEMDB_API_URL}?upc=${cleaned}`, {
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
     if (!response.ok) {
-      console.error(`UPC API error: ${response.status} ${response.statusText}`);
-      return null;
+      return {
+        code: cleaned,
+        codeType,
+        lookupStatus: "NOT_FOUND",
+        title: `Unidentified Retail Item – ID ${cleaned}`,
+        image: null,
+        brand: null,
+        category: null,
+        highestPrice: null
+      };
     }
+
+    const data = await response.json();
     
-    const data: UPCAPIResponse = await response.json();
-    
-    if (data.code !== 'OK' || data.total === 0 || !data.items || data.items.length === 0) {
-      console.log(`No product found for UPC: ${upc}`);
-      return null;
+    if (!data.items || data.items.length === 0) {
+      return {
+        code: cleaned,
+        codeType,
+        lookupStatus: "NOT_FOUND",
+        title: `Unidentified Retail Item – ID ${cleaned}`,
+        image: null,
+        brand: null,
+        category: null,
+        highestPrice: null
+      };
     }
-    
+
     const item = data.items[0];
     
-    const retailPrice = item.highest_recorded_price 
-      ? Math.round(item.highest_recorded_price * 100)
-      : null;
+    const rawTitle = item.title || "";
+    const cleanedTitle = cleanTitle(rawTitle) || `Retail Item – ${cleaned}`;
     
+    const image = item.images && item.images.length > 0 ? item.images[0] : null;
+    
+    const brand = item.brand || null;
+    const category = item.category || null;
+    
+    let highestPrice: number | null = null;
+    if (item.offers && item.offers.length > 0) {
+      const prices = item.offers
+        .map((o: any) => parseFloat(o.price))
+        .filter((p: number) => !isNaN(p) && p > 0);
+      if (prices.length > 0) {
+        highestPrice = Math.max(...prices);
+      }
+    }
+    if (!highestPrice && item.highest_recorded_price) {
+      highestPrice = parseFloat(item.highest_recorded_price);
+    }
+
     return {
-      title: item.title || 'Unknown Product',
-      description: item.description || '',
-      image: item.images && item.images.length > 0 ? item.images[0] : '',
-      retailPrice,
-      upc: item.upc || upc,
+      code: cleaned,
+      codeType,
+      lookupStatus: "SUCCESS",
+      title: cleanedTitle,
+      image,
+      brand,
+      category,
+      highestPrice
     };
   } catch (error) {
-    console.error('Error looking up UPC:', error);
-    return null;
+    console.error("UPC lookup error:", error);
+    return {
+      code: cleaned,
+      codeType,
+      lookupStatus: "NOT_FOUND",
+      title: `Unidentified Retail Item – ID ${cleaned}`,
+      image: null,
+      brand: null,
+      category: null,
+      highestPrice: null
+    };
   }
 }
+
+export type { ScanResult };
