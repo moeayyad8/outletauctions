@@ -2,10 +2,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Package, Trash2, DollarSign, ShoppingCart } from "lucide-react";
+import { Package, Trash2, DollarSign, ShoppingCart, Pencil } from "lucide-react";
 
 interface ScannedItem {
   code: string;
@@ -20,7 +21,41 @@ export default function RetailValueFinder() {
   const [code, setCode] = useState("");
   const [currentItem, setCurrentItem] = useState<ScannedItem | null>(null);
   const [boxItems, setBoxItems] = useState<ScannedItem[]>([]);
+  const [showPriceDialog, setShowPriceDialog] = useState(false);
+  const [editingPrice, setEditingPrice] = useState("");
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const { toast } = useToast();
+
+  const handleAdjustPrice = (index: number | null) => {
+    if (index === null && currentItem) {
+      setEditingPrice(currentItem.retailPrice ? (currentItem.retailPrice / 100).toFixed(2) : "");
+    } else if (index !== null && boxItems[index]) {
+      setEditingPrice(boxItems[index].retailPrice ? (boxItems[index].retailPrice / 100).toFixed(2) : "");
+    }
+    setEditingIndex(index);
+    setShowPriceDialog(true);
+  };
+
+  const handleSavePrice = () => {
+    const newPrice = parseFloat(editingPrice);
+    if (isNaN(newPrice) || newPrice < 0) {
+      toast({ title: "Please enter a valid price", variant: "destructive" });
+      return;
+    }
+    
+    const priceInCents = Math.round(newPrice * 100);
+    
+    if (editingIndex === null && currentItem) {
+      setCurrentItem({ ...currentItem, retailPrice: priceInCents });
+    } else if (editingIndex !== null) {
+      setBoxItems(prev => prev.map((item, i) => 
+        i === editingIndex ? { ...item, retailPrice: priceInCents } : item
+      ));
+    }
+    
+    setShowPriceDialog(false);
+    toast({ title: "Price updated!" });
+  };
 
   const scanMutation = useMutation({
     mutationFn: async (scanCode: string) => {
@@ -118,12 +153,23 @@ export default function RetailValueFinder() {
                   </div>
                   <div className="pt-2">
                     <p className="text-sm text-muted-foreground">Retail Value</p>
-                    <p className="text-4xl font-bold text-primary">
-                      {currentItem.retailPrice 
-                        ? `$${(currentItem.retailPrice / 100).toFixed(2)}`
-                        : "N/A"
-                      }
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-4xl font-bold text-primary">
+                        {currentItem.retailPrice 
+                          ? `$${(currentItem.retailPrice / 100).toFixed(2)}`
+                          : "N/A"
+                        }
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleAdjustPrice(null)}
+                        data-testid="button-adjust-current-price"
+                      >
+                        <Pencil className="w-3 h-3 mr-1" />
+                        Adjust
+                      </Button>
+                    </div>
                   </div>
                   <p className="text-xs text-muted-foreground font-mono">{currentItem.code}</p>
                 </div>
@@ -206,6 +252,39 @@ export default function RetailValueFinder() {
           Clear Box - Start New Bundle
         </Button>
       </div>
+
+      <Dialog open={showPriceDialog} onOpenChange={setShowPriceDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Adjust Retail Value</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">$</span>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={editingPrice}
+                onChange={(e) => setEditingPrice(e.target.value)}
+                placeholder="0.00"
+                className="text-2xl h-14"
+                autoFocus
+                onKeyDown={(e) => e.key === "Enter" && handleSavePrice()}
+                data-testid="input-adjust-price"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleSavePrice} className="flex-1" data-testid="button-save-price">
+                Save
+              </Button>
+              <Button variant="outline" onClick={() => setShowPriceDialog(false)} className="flex-1">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
