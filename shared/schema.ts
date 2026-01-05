@@ -98,3 +98,33 @@ export const insertAuctionSchema = createInsertSchema(auctions).omit({
 });
 export type InsertAuction = z.infer<typeof insertAuctionSchema>;
 export type Auction = typeof auctions.$inferSelect;
+
+// Tags table - for categorization and location tracking
+export const tags = pgTable("tags", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  type: varchar("type", { length: 20 }).notNull(), // 'location' or 'category'
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [index("IDX_tag_type").on(table.type)]);
+
+export const insertTagSchema = createInsertSchema(tags).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertTag = z.infer<typeof insertTagSchema>;
+export type Tag = typeof tags.$inferSelect;
+
+// Auction-Tag join table
+export const auctionTags = pgTable("auction_tags", {
+  id: serial("id").primaryKey(),
+  auctionId: integer("auction_id").notNull(),
+  tagId: integer("tag_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAuctionTagSchema = createInsertSchema(auctionTags).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertAuctionTag = z.infer<typeof insertAuctionTagSchema>;
+export type AuctionTag = typeof auctionTags.$inferSelect;

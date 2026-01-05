@@ -1,6 +1,6 @@
-import { users, bids, watchlist, auctions, type User, type UpsertUser, type Bid, type InsertBid, type Watchlist, type InsertWatchlist, type Auction, type InsertAuction } from "@shared/schema";
+import { users, bids, watchlist, auctions, tags, auctionTags, type User, type UpsertUser, type Bid, type InsertBid, type Watchlist, type InsertWatchlist, type Auction, type InsertAuction, type Tag, type InsertTag, type AuctionTag } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, like } from "drizzle-orm";
+import { eq, desc, and, like, inArray } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -14,6 +14,12 @@ export interface IStorage {
   getAllAuctions(): Promise<Auction[]>;
   getAuction(id: number): Promise<Auction | undefined>;
   getNextInternalCode(): Promise<string>;
+  getAllTags(): Promise<Tag[]>;
+  getTagsByType(type: string): Promise<Tag[]>;
+  createTag(tag: InsertTag): Promise<Tag>;
+  attachTagsToAuction(auctionId: number, tagIds: number[]): Promise<void>;
+  getAuctionTags(auctionId: number): Promise<Tag[]>;
+  searchAuctionsByTags(tagIds: number[]): Promise<Auction[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -94,6 +100,47 @@ export class DatabaseStorage implements IStorage {
     
     const nextNumber = maxNumber + 1;
     return `OA${nextNumber.toString().padStart(9, '0')}`;
+  }
+
+  async getAllTags(): Promise<Tag[]> {
+    return db.select().from(tags).orderBy(tags.type, tags.name);
+  }
+
+  async getTagsByType(type: string): Promise<Tag[]> {
+    return db.select().from(tags).where(eq(tags.type, type)).orderBy(tags.name);
+  }
+
+  async createTag(tag: InsertTag): Promise<Tag> {
+    const [newTag] = await db.insert(tags).values(tag).returning();
+    return newTag;
+  }
+
+  async attachTagsToAuction(auctionId: number, tagIds: number[]): Promise<void> {
+    if (tagIds.length === 0) return;
+    const values = tagIds.map(tagId => ({ auctionId, tagId }));
+    await db.insert(auctionTags).values(values);
+  }
+
+  async getAuctionTags(auctionId: number): Promise<Tag[]> {
+    const result = await db
+      .select({ tag: tags })
+      .from(auctionTags)
+      .innerJoin(tags, eq(auctionTags.tagId, tags.id))
+      .where(eq(auctionTags.auctionId, auctionId));
+    return result.map(r => r.tag);
+  }
+
+  async searchAuctionsByTags(tagIds: number[]): Promise<Auction[]> {
+    if (tagIds.length === 0) return [];
+    const auctionIdsResult = await db
+      .select({ auctionId: auctionTags.auctionId })
+      .from(auctionTags)
+      .where(inArray(auctionTags.tagId, tagIds));
+    
+    const auctionIds = [...new Set(auctionIdsResult.map(r => r.auctionId))];
+    if (auctionIds.length === 0) return [];
+    
+    return db.select().from(auctions).where(inArray(auctions.id, auctionIds));
   }
 }
 
