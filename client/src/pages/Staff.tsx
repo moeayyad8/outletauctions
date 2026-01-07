@@ -8,7 +8,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useUpload } from '@/hooks/use-upload';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel } from 'lucide-react';
+import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel, Store, ExternalLink } from 'lucide-react';
+import { SiAmazon, SiEbay } from 'react-icons/si';
 import JsBarcode from 'jsbarcode';
 import type { Auction, Tag as TagType } from '@shared/schema';
 
@@ -23,10 +24,13 @@ interface ScanResult {
   highestPrice: number | null;
 }
 
+type DestinationType = 'auction' | 'ebay' | 'amazon';
+
 interface BatchItem extends ScanResult {
   customImage: string | null;
   selectedTags: number[];
   id: string;
+  destination: DestinationType;
 }
 
 type TabType = 'scanner' | 'inventory' | 'fulfillment';
@@ -112,6 +116,7 @@ export default function Staff() {
         customImage: null,
         selectedTags: [],
         id: `${data.code}-${Date.now()}`,
+        destination: 'auction',
       };
       setBatch(prev => [newItem, ...prev]);
       setCode('');
@@ -146,11 +151,18 @@ export default function Staff() {
         customImage: null,
         selectedTags: [],
         id: `${data.code}-${Date.now()}`,
+        destination: 'auction',
       };
       setBatch(prev => [newItem, ...prev]);
       toast({ title: `Generated: ${data.code}` });
     },
   });
+
+  const toggleItemDestination = (id: string, destination: DestinationType) => {
+    setBatch(prev => prev.map(item => 
+      item.id === id ? { ...item, destination } : item
+    ));
+  };
 
   const createAuctionMutation = useMutation({
     mutationFn: async (item: BatchItem) => {
@@ -162,6 +174,7 @@ export default function Staff() {
         retailPrice: item.highestPrice ? Math.round(item.highestPrice * 100) : null,
         startingBid: 1,
         status: 'draft',
+        destination: item.destination,
       };
       const response = await apiRequest('POST', '/api/staff/auctions', auctionData);
       const auction = await response.json();
@@ -457,6 +470,39 @@ export default function Staff() {
                                 </Badge>
                               ))}
                             </div>
+                          </div>
+                          
+                          <div className="flex gap-1 mt-2 pt-2 border-t">
+                            <Button
+                              variant={item.destination === 'auction' ? 'default' : 'outline'}
+                              size="sm"
+                              className="flex-1 h-7 text-[10px]"
+                              onClick={() => toggleItemDestination(item.id, 'auction')}
+                              data-testid={`dest-auction-${item.id}`}
+                            >
+                              <Gavel className="w-3 h-3 mr-1" />
+                              Auction
+                            </Button>
+                            <Button
+                              variant={item.destination === 'ebay' ? 'default' : 'outline'}
+                              size="sm"
+                              className="flex-1 h-7 text-[10px]"
+                              onClick={() => toggleItemDestination(item.id, 'ebay')}
+                              data-testid={`dest-ebay-${item.id}`}
+                            >
+                              <SiEbay className="w-3 h-3 mr-1" />
+                              eBay
+                            </Button>
+                            <Button
+                              variant={item.destination === 'amazon' ? 'default' : 'outline'}
+                              size="sm"
+                              className="flex-1 h-7 text-[10px]"
+                              onClick={() => toggleItemDestination(item.id, 'amazon')}
+                              data-testid={`dest-amazon-${item.id}`}
+                            >
+                              <SiAmazon className="w-3 h-3 mr-1" />
+                              Amazon
+                            </Button>
                           </div>
                         </div>
                       </div>

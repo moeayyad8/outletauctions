@@ -88,6 +88,12 @@ export const auctions = pgTable("auctions", {
   bidCount: integer("bid_count").notNull().default(0),
   endTime: timestamp("end_time"),
   status: varchar("status", { length: 20 }).notNull().default("draft"),
+  destination: varchar("destination", { length: 20 }).notNull().default("auction"),
+  externalStatus: varchar("external_status", { length: 20 }),
+  externalListingId: varchar("external_listing_id", { length: 100 }),
+  externalListingUrl: varchar("external_listing_url", { length: 500 }),
+  externalPayload: jsonb("external_payload"),
+  lastSyncAt: timestamp("last_sync_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
