@@ -11,7 +11,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel, Store, ExternalLink } from 'lucide-react';
 import { SiAmazon, SiEbay } from 'react-icons/si';
 import JsBarcode from 'jsbarcode';
-import type { Auction, Tag as TagType } from '@shared/schema';
+import type { Auction, Tag as TagType, Shelf } from '@shared/schema';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { MapPin } from 'lucide-react';
 
 interface ScanResult {
   code: string;
@@ -31,6 +33,7 @@ interface BatchItem extends ScanResult {
   selectedTags: number[];
   id: string;
   destination: DestinationType;
+  shelfId: number | null;
 }
 
 type TabType = 'scanner' | 'inventory' | 'fulfillment';
@@ -54,6 +57,10 @@ export default function Staff() {
 
   const { data: auctions = [] } = useQuery<Auction[]>({
     queryKey: ['/api/staff/auctions'],
+  });
+
+  const { data: shelves = [] } = useQuery<Shelf[]>({
+    queryKey: ['/api/shelves'],
   });
 
   const locationTags = allTags.filter(t => t.type === 'location');
@@ -117,6 +124,7 @@ export default function Staff() {
         selectedTags: [],
         id: `${data.code}-${Date.now()}`,
         destination: 'auction',
+        shelfId: null,
       };
       setBatch(prev => [newItem, ...prev]);
       setCode('');
@@ -152,6 +160,7 @@ export default function Staff() {
         selectedTags: [],
         id: `${data.code}-${Date.now()}`,
         destination: 'auction',
+        shelfId: null,
       };
       setBatch(prev => [newItem, ...prev]);
       toast({ title: `Generated: ${data.code}` });
@@ -161,6 +170,12 @@ export default function Staff() {
   const toggleItemDestination = (id: string, destination: DestinationType) => {
     setBatch(prev => prev.map(item => 
       item.id === id ? { ...item, destination } : item
+    ));
+  };
+
+  const setItemShelf = (id: string, shelfId: number | null) => {
+    setBatch(prev => prev.map(item => 
+      item.id === id ? { ...item, shelfId } : item
     ));
   };
 
@@ -175,6 +190,7 @@ export default function Staff() {
         startingBid: 1,
         status: 'draft',
         destination: item.destination,
+        shelfId: item.shelfId,
       };
       const response = await apiRequest('POST', '/api/staff/auctions', auctionData);
       const auction = await response.json();
@@ -270,6 +286,16 @@ export default function Staff() {
   const handleSendToInventory = async () => {
     if (batch.length === 0) return;
     
+    const itemsWithoutShelf = batch.filter(item => !item.shelfId);
+    if (itemsWithoutShelf.length > 0) {
+      toast({ 
+        title: 'Select location for all items', 
+        description: `${itemsWithoutShelf.length} item(s) need a shelf location`,
+        variant: 'destructive' 
+      });
+      return;
+    }
+    
     setIsSending(true);
     let successCount = 0;
     
@@ -283,6 +309,7 @@ export default function Staff() {
     }
     
     queryClient.invalidateQueries({ queryKey: ['/api/staff/auctions'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/shelves'] });
     setBatch([]);
     setIsSending(false);
     toast({ title: `Added ${successCount} items to inventory!` });
@@ -472,7 +499,7 @@ export default function Staff() {
                             </Button>
                           </div>
                           
-                          <div className="flex items-center justify-between mt-2">
+                          <div className="flex items-center justify-between mt-2 gap-2">
                             {item.highestPrice ? (
                               <span className="text-sm font-semibold text-green-600">
                                 ${item.highestPrice.toFixed(2)}
@@ -481,20 +508,40 @@ export default function Staff() {
                               <span className="text-xs text-muted-foreground">No price</span>
                             )}
                             
-                            <div className="flex gap-1 flex-wrap justify-end">
-                              {[...locationTags, ...categoryTags].slice(0, 4).map(tag => (
-                                <Badge
-                                  key={tag.id}
-                                  variant={item.selectedTags.includes(tag.id) ? "default" : "outline"}
-                                  className={`cursor-pointer text-[10px] px-1.5 py-0 ${
-                                    tag.type === 'location' ? 'border-blue-400' : 'border-purple-400'
-                                  }`}
-                                  onClick={() => toggleItemTag(item.id, tag.id)}
-                                >
-                                  {tag.name}
-                                </Badge>
-                              ))}
-                            </div>
+                            <Select
+                              value={item.shelfId?.toString() || ''}
+                              onValueChange={(val) => setItemShelf(item.id, val ? parseInt(val) : null)}
+                            >
+                              <SelectTrigger 
+                                className={`w-[120px] h-7 text-xs ${!item.shelfId ? 'border-orange-400 text-orange-600' : ''}`}
+                                data-testid={`select-shelf-${item.id}`}
+                              >
+                                <MapPin className="w-3 h-3 mr-1" />
+                                <SelectValue placeholder="Location" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {shelves.map(shelf => (
+                                  <SelectItem key={shelf.id} value={shelf.id.toString()}>
+                                    {shelf.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          
+                          <div className="flex gap-1 flex-wrap mt-1">
+                            {[...locationTags, ...categoryTags].slice(0, 4).map(tag => (
+                              <Badge
+                                key={tag.id}
+                                variant={item.selectedTags.includes(tag.id) ? "default" : "outline"}
+                                className={`cursor-pointer text-[10px] px-1.5 py-0 ${
+                                  tag.type === 'location' ? 'border-blue-400' : 'border-purple-400'
+                                }`}
+                                onClick={() => toggleItemTag(item.id, tag.id)}
+                              >
+                                {tag.name}
+                              </Badge>
+                            ))}
                           </div>
                           
                           <div className="flex gap-1 mt-2 pt-2 border-t">
@@ -679,6 +726,12 @@ export default function Staff() {
                             {auction.retailPrice ? `$${(auction.retailPrice / 100).toFixed(2)}` : '—'}
                           </span>
                           <span className="font-mono text-[10px] truncate">{auction.internalCode || auction.upc}</span>
+                          {auction.shelfId && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-green-400 text-green-600">
+                              <MapPin className="w-2.5 h-2.5 mr-0.5" />
+                              {shelves.find(s => s.id === auction.shelfId)?.name || `Shelf ${auction.shelfId}`}
+                            </Badge>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-0.5">
