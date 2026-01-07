@@ -1,4 +1,4 @@
-import { users, bids, watchlist, auctions, tags, auctionTags, type User, type UpsertUser, type Bid, type InsertBid, type Watchlist, type InsertWatchlist, type Auction, type InsertAuction, type Tag, type InsertTag, type AuctionTag } from "@shared/schema";
+import { users, bids, watchlist, auctions, tags, auctionTags, shelves, type User, type UpsertUser, type Bid, type InsertBid, type Watchlist, type InsertWatchlist, type Auction, type InsertAuction, type Tag, type InsertTag, type AuctionTag, type Shelf, type InsertShelf } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, like, inArray } from "drizzle-orm";
 
@@ -24,6 +24,11 @@ export interface IStorage {
   getAuctionTags(auctionId: number): Promise<Tag[]>;
   searchAuctionsByTags(tagIds: number[]): Promise<Auction[]>;
   deleteAuction(id: number): Promise<void>;
+  getAllShelves(): Promise<Shelf[]>;
+  getShelf(id: number): Promise<Shelf | undefined>;
+  createShelf(shelf: InsertShelf): Promise<Shelf>;
+  updateAuctionShelf(auctionId: number, shelfId: number | null): Promise<Auction | undefined>;
+  seedShelves(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -192,6 +197,39 @@ export class DatabaseStorage implements IStorage {
     await db.delete(bids).where(eq(bids.auctionId, id));
     await db.delete(watchlist).where(eq(watchlist.auctionId, id));
     await db.delete(auctions).where(eq(auctions.id, id));
+  }
+
+  async getAllShelves(): Promise<Shelf[]> {
+    return db.select().from(shelves).orderBy(shelves.id);
+  }
+
+  async getShelf(id: number): Promise<Shelf | undefined> {
+    const [shelf] = await db.select().from(shelves).where(eq(shelves.id, id));
+    return shelf;
+  }
+
+  async createShelf(shelf: InsertShelf): Promise<Shelf> {
+    const [newShelf] = await db.insert(shelves).values(shelf).returning();
+    return newShelf;
+  }
+
+  async updateAuctionShelf(auctionId: number, shelfId: number | null): Promise<Auction | undefined> {
+    const [updated] = await db.update(auctions).set({ shelfId }).where(eq(auctions.id, auctionId)).returning();
+    return updated;
+  }
+
+  async seedShelves(): Promise<void> {
+    const existingShelves = await this.getAllShelves();
+    if (existingShelves.length > 0) return;
+    
+    const shelfData: InsertShelf[] = [];
+    for (let i = 1; i <= 32; i++) {
+      shelfData.push({
+        name: `Shelf ${i}`,
+        code: `S${i.toString().padStart(2, '0')}`,
+      });
+    }
+    await db.insert(shelves).values(shelfData);
   }
 }
 

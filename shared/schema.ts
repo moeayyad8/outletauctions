@@ -94,6 +94,7 @@ export const auctions = pgTable("auctions", {
   externalListingUrl: varchar("external_listing_url", { length: 500 }),
   externalPayload: jsonb("external_payload"),
   lastSyncAt: timestamp("last_sync_at"),
+  shelfId: integer("shelf_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -135,3 +136,20 @@ export const insertAuctionTagSchema = createInsertSchema(auctionTags).omit({
 });
 export type InsertAuctionTag = z.infer<typeof insertAuctionTagSchema>;
 export type AuctionTag = typeof auctionTags.$inferSelect;
+
+// Shelves table - physical storage locations
+export const shelves = pgTable("shelves", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 50 }).notNull(),
+  code: varchar("code", { length: 10 }).notNull().unique(),
+  itemCount: integer("item_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertShelfSchema = createInsertSchema(shelves).omit({
+  id: true,
+  itemCount: true,
+  createdAt: true,
+});
+export type InsertShelf = z.infer<typeof insertShelfSchema>;
+export type Shelf = typeof shelves.$inferSelect;

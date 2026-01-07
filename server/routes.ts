@@ -9,6 +9,9 @@ import { registerObjectStorageRoutes } from "./replit_integrations/object_storag
 export async function registerRoutes(app: Express): Promise<Server> {
   await setupAuth(app);
   registerObjectStorageRoutes(app);
+  
+  // Seed shelves on startup
+  await storage.seedShelves();
 
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
@@ -148,6 +151,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error getting next internal code:", error);
       res.status(500).json({ message: "Failed to get next internal code" });
+    }
+  });
+
+  // Shelves management
+  app.get('/api/shelves', async (req, res) => {
+    try {
+      const allShelves = await storage.getAllShelves();
+      res.json(allShelves);
+    } catch (error) {
+      console.error("Error fetching shelves:", error);
+      res.status(500).json({ message: "Failed to fetch shelves" });
+    }
+  });
+
+  app.patch('/api/staff/auctions/:id/shelf', async (req, res) => {
+    try {
+      const auctionId = parseInt(req.params.id);
+      const { shelfId } = req.body;
+      
+      if (isNaN(auctionId)) {
+        return res.status(400).json({ message: "Invalid auction ID" });
+      }
+      
+      const updated = await storage.updateAuctionShelf(auctionId, shelfId);
+      if (!updated) {
+        return res.status(404).json({ message: "Auction not found" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating auction shelf:", error);
+      res.status(400).json({ message: "Failed to update shelf" });
     }
   });
 
