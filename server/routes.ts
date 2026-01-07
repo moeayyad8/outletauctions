@@ -269,6 +269,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Publish auction to destination (auction, eBay, or Amazon)
+  app.post('/api/staff/auctions/:id/publish', async (req, res) => {
+    try {
+      const auctionId = parseInt(req.params.id);
+      const { destination } = req.body;
+      
+      if (isNaN(auctionId)) {
+        return res.status(400).json({ message: "Invalid auction ID" });
+      }
+      
+      if (!destination || !['auction', 'ebay', 'amazon'].includes(destination)) {
+        return res.status(400).json({ message: "Invalid destination" });
+      }
+      
+      const auction = await storage.getAuction(auctionId);
+      if (!auction) {
+        return res.status(404).json({ message: "Auction not found" });
+      }
+      
+      if (destination === 'auction') {
+        // Send to internal auction - also reset any external metadata
+        const endTime = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        await storage.updateAuctionExternal(auctionId, 'auction', '', '', '', null);
+        const updated = await storage.updateAuctionStatus(auctionId, 'active', endTime);
+        res.json(updated);
+      } else {
+        // Mock eBay/Amazon publishing - simulate pending then listed
+        const externalPayload = {
+          platform: destination,
+          submittedAt: new Date().toISOString(),
+          title: auction.title,
+          price: auction.retailPrice,
+        };
+        
+        // Simulate external listing creation (mock)
+        const mockListingId = `${destination.toUpperCase()}-${Date.now()}`;
+        const mockListingUrl = destination === 'ebay' 
+          ? `https://www.ebay.com/itm/${mockListingId}`
+          : `https://www.amazon.com/dp/${mockListingId}`;
+        
+        const updated = await storage.updateAuctionExternal(
+          auctionId,
+          destination,
+          'listed', // In real integration, would start as 'pending'
+          mockListingId,
+          mockListingUrl,
+          externalPayload
+        );
+        
+        res.json(updated);
+      }
+    } catch (error) {
+      console.error("Error publishing auction:", error);
+      res.status(500).json({ message: "Failed to publish auction" });
+    }
+  });
+
   app.get('/api/staff/auctions/search/by-tags', async (req, res) => {
     try {
       const { tagIds } = req.query;

@@ -222,6 +222,31 @@ export default function Staff() {
     sendToAuctionMutation.mutate(id);
   };
 
+  const publishMutation = useMutation({
+    mutationFn: async ({ id, destination }: { id: number; destination: DestinationType }) => {
+      const response = await apiRequest('POST', `/api/staff/auctions/${id}/publish`, {
+        destination,
+      });
+      return response.json();
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/staff/auctions'] });
+      const dest = variables.destination;
+      if (dest === 'auction') {
+        toast({ title: 'Item is now live on your auction!' });
+      } else {
+        toast({ title: `Sent to ${dest === 'ebay' ? 'eBay' : 'Amazon'}!`, description: 'Check Fulfillment tab for status' });
+      }
+    },
+    onError: () => {
+      toast({ title: 'Failed to publish', variant: 'destructive' });
+    },
+  });
+
+  const handlePublish = (id: number, destination: DestinationType) => {
+    publishMutation.mutate({ id, destination });
+  };
+
   const handleScan = () => {
     if (code.trim()) {
       scanMutation.mutate(code.trim());
@@ -596,96 +621,225 @@ export default function Staff() {
             </div>
           ) : (
             <div className="space-y-2">
-              {auctions.map((auction) => (
-                <div 
-                  key={auction.id} 
-                  className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${
-                    auction.status === 'active' 
-                      ? 'bg-green-500/10 border border-green-500/30' 
-                      : 'bg-muted/50 hover:bg-muted/80'
-                  }`}
-                >
-                  <div className="w-14 h-14 rounded-lg bg-background flex items-center justify-center shrink-0 overflow-hidden">
-                    {auction.image ? (
-                      <img src={auction.image} alt={auction.title} className="w-full h-full object-cover rounded-lg" />
-                    ) : (
-                      <Package className="w-6 h-6 text-muted-foreground" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <p className="font-medium text-sm truncate">{auction.title}</p>
-                      {auction.status === 'active' && (
-                        <Badge variant="default" className="text-[10px] px-1.5 py-0 bg-green-600">
-                          Live
-                        </Badge>
-                      )}
+              {auctions.map((auction) => {
+                const dest = (auction.destination as DestinationType) || 'auction';
+                const isListed = auction.status === 'active' || auction.externalStatus === 'listed';
+                
+                return (
+                  <div 
+                    key={auction.id} 
+                    className={`p-3 rounded-xl transition-colors ${
+                      isListed
+                        ? 'bg-green-500/10 border border-green-500/30' 
+                        : 'bg-muted/50 hover:bg-muted/80'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-14 h-14 rounded-lg bg-background flex items-center justify-center shrink-0 overflow-hidden">
+                        {auction.image ? (
+                          <img src={auction.image} alt={auction.title} className="w-full h-full object-cover rounded-lg" />
+                        ) : (
+                          <Package className="w-6 h-6 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                          <p className="font-medium text-sm truncate">{auction.title}</p>
+                          <Badge 
+                            variant="outline" 
+                            className={`text-[10px] px-1.5 py-0 ${
+                              dest === 'auction' ? 'border-primary text-primary' :
+                              dest === 'ebay' ? 'border-blue-500 text-blue-600' :
+                              'border-orange-500 text-orange-600'
+                            }`}
+                          >
+                            {dest === 'auction' && <Gavel className="w-2.5 h-2.5 mr-0.5" />}
+                            {dest === 'ebay' && <SiEbay className="w-2.5 h-2.5 mr-0.5" />}
+                            {dest === 'amazon' && <SiAmazon className="w-2.5 h-2.5 mr-0.5" />}
+                            {dest === 'auction' ? 'Auction' : dest === 'ebay' ? 'eBay' : 'Amazon'}
+                          </Badge>
+                          {isListed && (
+                            <Badge variant="default" className="text-[10px] px-1.5 py-0 bg-green-600">
+                              Live
+                            </Badge>
+                          )}
+                          {auction.externalStatus === 'pending' && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                              Pending
+                            </Badge>
+                          )}
+                          {auction.externalStatus === 'error' && (
+                            <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                              Error
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span className="font-semibold text-foreground">
+                            {auction.retailPrice ? `$${(auction.retailPrice / 100).toFixed(2)}` : '—'}
+                          </span>
+                          <span className="font-mono text-[10px] truncate">{auction.internalCode || auction.upc}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-0.5">
+                        {auction.status === 'draft' && !auction.externalStatus && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className={`h-8 px-2 text-xs ${
+                              dest === 'ebay' ? 'bg-blue-600 hover:bg-blue-700' :
+                              dest === 'amazon' ? 'bg-orange-600 hover:bg-orange-700' : ''
+                            }`}
+                            onClick={() => handlePublish(auction.id, dest)}
+                            disabled={publishMutation.isPending}
+                            data-testid={`button-publish-${auction.id}`}
+                          >
+                            {dest === 'auction' && <Gavel className="w-3 h-3 mr-1" />}
+                            {dest === 'ebay' && <SiEbay className="w-3 h-3 mr-1" />}
+                            {dest === 'amazon' && <SiAmazon className="w-3 h-3 mr-1" />}
+                            {dest === 'auction' ? 'Go Live' : 'Publish'}
+                          </Button>
+                        )}
+                        {auction.externalListingUrl && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => window.open(auction.externalListingUrl!, '_blank')}
+                            data-testid={`button-view-${auction.id}`}
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {auction.internalCode && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handlePrintBarcode(auction.internalCode!)}
+                            data-testid={`button-print-${auction.id}`}
+                          >
+                            <Printer className="w-4 h-4" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => handleDeleteAuction(auction.id)}
+                          data-testid={`button-delete-${auction.id}`}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="font-semibold text-foreground">
-                        {auction.retailPrice ? `$${(auction.retailPrice / 100).toFixed(2)}` : '—'}
-                      </span>
-                      <span className="font-mono text-[10px] truncate">{auction.internalCode || auction.upc}</span>
-                    </div>
                   </div>
-                  <div className="flex items-center gap-0.5">
-                    {auction.status === 'draft' && (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="h-8 px-2 text-xs"
-                        onClick={() => handleSendToAuction(auction.id)}
-                        disabled={sendToAuctionMutation.isPending}
-                        data-testid={`button-auction-${auction.id}`}
-                      >
-                        <Gavel className="w-3 h-3 mr-1" />
-                        Go Live
-                      </Button>
-                    )}
-                    {auction.internalCode && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => handlePrintBarcode(auction.internalCode!)}
-                        data-testid={`button-print-${auction.id}`}
-                      >
-                        <Printer className="w-4 h-4" />
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive hover:text-destructive"
-                      onClick={() => handleDeleteAuction(auction.id)}
-                      data-testid={`button-delete-${auction.id}`}
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
       )}
 
       {activeTab === 'fulfillment' && (
-        <div className="max-w-2xl mx-auto p-4 space-y-4">
+        <div className="max-w-2xl mx-auto p-4 space-y-4 pb-24">
           <header className="pt-2">
             <h1 className="text-2xl font-bold tracking-tight">Fulfillment</h1>
-            <p className="text-sm text-muted-foreground">Order processing & shipping</p>
+            <p className="text-sm text-muted-foreground">External listings & orders</p>
           </header>
 
-          <div className="text-center py-16 px-4">
-            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-              <Truck className="w-8 h-8 text-muted-foreground" />
-            </div>
-            <h3 className="font-semibold text-lg mb-1">Coming soon</h3>
-            <p className="text-muted-foreground text-sm max-w-xs mx-auto">
-              Order management and shipping features will be available here
-            </p>
-          </div>
+          {(() => {
+            const externalAuctions = auctions.filter(a => 
+              a.destination === 'ebay' || a.destination === 'amazon'
+            );
+            
+            if (externalAuctions.length === 0) {
+              return (
+                <div className="text-center py-16 px-4">
+                  <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+                    <Truck className="w-8 h-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="font-semibold text-lg mb-1">No external listings</h3>
+                  <p className="text-muted-foreground text-sm max-w-xs mx-auto">
+                    Items sent to eBay or Amazon will appear here
+                  </p>
+                </div>
+              );
+            }
+            
+            return (
+              <div className="space-y-2">
+                {externalAuctions.map((auction) => {
+                  const dest = auction.destination as DestinationType;
+                  return (
+                    <div 
+                      key={auction.id}
+                      className={`p-3 rounded-xl ${
+                        auction.externalStatus === 'listed' ? 'bg-green-500/10 border border-green-500/30' :
+                        auction.externalStatus === 'error' ? 'bg-red-500/10 border border-red-500/30' :
+                        'bg-muted/50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-lg bg-background flex items-center justify-center shrink-0 overflow-hidden">
+                          {auction.image ? (
+                            <img src={auction.image} alt={auction.title} className="w-full h-full object-cover rounded-lg" />
+                          ) : (
+                            <Package className="w-5 h-5 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                            <p className="font-medium text-sm truncate">{auction.title}</p>
+                            <Badge 
+                              variant="outline" 
+                              className={`text-[10px] px-1.5 py-0 ${
+                                dest === 'ebay' ? 'border-blue-500 text-blue-600' : 'border-orange-500 text-orange-600'
+                              }`}
+                            >
+                              {dest === 'ebay' && <SiEbay className="w-2.5 h-2.5 mr-0.5" />}
+                              {dest === 'amazon' && <SiAmazon className="w-2.5 h-2.5 mr-0.5" />}
+                              {dest === 'ebay' ? 'eBay' : 'Amazon'}
+                            </Badge>
+                            {auction.externalStatus === 'listed' && (
+                              <Badge variant="default" className="text-[10px] px-1.5 py-0 bg-green-600">
+                                Listed
+                              </Badge>
+                            )}
+                            {auction.externalStatus === 'pending' && (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                Pending
+                              </Badge>
+                            )}
+                            {auction.externalStatus === 'error' && (
+                              <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                                Error
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span className="font-mono text-[10px] truncate">{auction.externalListingId || auction.internalCode}</span>
+                          </div>
+                        </div>
+                        {auction.externalListingUrl && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs"
+                            onClick={() => window.open(auction.externalListingUrl!, '_blank')}
+                            data-testid={`button-view-listing-${auction.id}`}
+                          >
+                            <ExternalLink className="w-3 h-3 mr-1" />
+                            View
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 

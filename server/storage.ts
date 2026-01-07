@@ -15,6 +15,7 @@ export interface IStorage {
   getActiveAuctions(): Promise<Auction[]>;
   getAuction(id: number): Promise<Auction | undefined>;
   updateAuctionStatus(id: number, status: string, endTime?: Date): Promise<Auction | undefined>;
+  updateAuctionExternal(id: number, destination: string, externalStatus: string, externalListingId: string, externalListingUrl: string, externalPayload: unknown): Promise<Auction | undefined>;
   getNextInternalCode(): Promise<string>;
   getAllTags(): Promise<Tag[]>;
   getTagsByType(type: string): Promise<Tag[]>;
@@ -101,6 +102,29 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async updateAuctionExternal(
+    id: number,
+    destination: string,
+    externalStatus: string,
+    externalListingId: string,
+    externalListingUrl: string,
+    externalPayload: unknown
+  ): Promise<Auction | undefined> {
+    const [updated] = await db
+      .update(auctions)
+      .set({
+        destination,
+        externalStatus,
+        externalListingId,
+        externalListingUrl,
+        externalPayload,
+        lastSyncAt: new Date(),
+      })
+      .where(eq(auctions.id, id))
+      .returning();
+    return updated;
+  }
+
   async getNextInternalCode(): Promise<string> {
     const oaAuctions = await db
       .select({ internalCode: auctions.internalCode })
@@ -157,7 +181,7 @@ export class DatabaseStorage implements IStorage {
       .from(auctionTags)
       .where(inArray(auctionTags.tagId, tagIds));
     
-    const auctionIds = [...new Set(auctionIdsResult.map(r => r.auctionId))];
+    const auctionIds = Array.from(new Set(auctionIdsResult.map(r => r.auctionId)));
     if (auctionIds.length === 0) return [];
     
     return db.select().from(auctions).where(inArray(auctions.id, auctionIds));
