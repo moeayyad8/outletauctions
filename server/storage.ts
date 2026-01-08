@@ -26,6 +26,7 @@ export interface IStorage {
   deleteAuction(id: number): Promise<void>;
   getAllShelves(): Promise<Shelf[]>;
   getShelf(id: number): Promise<Shelf | undefined>;
+  getShelfByCode(code: string): Promise<Shelf | undefined>;
   createShelf(shelf: InsertShelf): Promise<Shelf>;
   updateAuctionShelf(auctionId: number, shelfId: number | null): Promise<Auction | undefined>;
   seedShelves(): Promise<void>;
@@ -220,16 +221,32 @@ export class DatabaseStorage implements IStorage {
 
   async seedShelves(): Promise<void> {
     const existingShelves = await this.getAllShelves();
-    if (existingShelves.length > 0) return;
+    
+    if (existingShelves.length > 0) {
+      // Update existing shelves to new OASXX format if needed
+      for (const shelf of existingShelves) {
+        if (!shelf.code.startsWith('OAS')) {
+          const num = shelf.id;
+          const newCode = `OAS${num.toString().padStart(2, '0')}`;
+          await db.update(shelves).set({ code: newCode }).where(eq(shelves.id, shelf.id));
+        }
+      }
+      return;
+    }
     
     const shelfData: InsertShelf[] = [];
     for (let i = 1; i <= 32; i++) {
       shelfData.push({
         name: `Shelf ${i}`,
-        code: `S${i.toString().padStart(2, '0')}`,
+        code: `OAS${i.toString().padStart(2, '0')}`,
       });
     }
     await db.insert(shelves).values(shelfData);
+  }
+  
+  async getShelfByCode(code: string): Promise<Shelf | undefined> {
+    const [shelf] = await db.select().from(shelves).where(eq(shelves.code, code));
+    return shelf;
   }
 }
 

@@ -922,6 +922,33 @@ export default function Staff() {
             <p className="text-sm text-muted-foreground">Track items across shelf locations</p>
           </header>
 
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Scan shelf barcode (OASXX)..."
+                    className="pl-9"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const input = e.currentTarget.value.trim().toUpperCase();
+                        const shelf = shelves.find(s => s.code === input);
+                        if (shelf) {
+                          setSelectedShelf(shelf.id);
+                          e.currentTarget.value = '';
+                        } else {
+                          toast({ title: 'Shelf not found', variant: 'destructive' });
+                        }
+                      }
+                    }}
+                    data-testid="input-shelf-barcode"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {selectedShelf === null ? (
             <>
               <div className="grid grid-cols-4 gap-2">
@@ -966,6 +993,20 @@ export default function Staff() {
                     {shelves.find(s => s.id === selectedShelf)?.code}
                   </span>
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const shelf = shelves.find(s => s.id === selectedShelf);
+                    if (shelf) {
+                      handlePrintBarcode(shelf.code);
+                    }
+                  }}
+                  data-testid="button-print-shelf-barcode"
+                >
+                  <Printer className="w-4 h-4 mr-1" />
+                  Print Label
+                </Button>
               </div>
 
               <Card>
