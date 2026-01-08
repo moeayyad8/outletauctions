@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useUpload } from '@/hooks/use-upload';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel, Store, ExternalLink } from 'lucide-react';
+import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel, Store, ExternalLink, Grid3X3, ArrowRightLeft, LogIn, LogOut } from 'lucide-react';
 import { SiAmazon, SiEbay } from 'react-icons/si';
 import JsBarcode from 'jsbarcode';
 import type { Auction, Tag as TagType, Shelf } from '@shared/schema';
@@ -36,7 +36,7 @@ interface BatchItem extends ScanResult {
   shelfId: number | null;
 }
 
-type TabType = 'scanner' | 'inventory' | 'fulfillment';
+type TabType = 'scanner' | 'inventory' | 'fulfillment' | 'shelves';
 
 export default function Staff() {
   const [activeTab, setActiveTab] = useState<TabType>('scanner');
@@ -48,6 +48,9 @@ export default function Staff() {
   const [newTagName, setNewTagName] = useState('');
   const [newTagType, setNewTagType] = useState<'location' | 'category'>('category');
   const [isSending, setIsSending] = useState(false);
+  const [selectedShelf, setSelectedShelf] = useState<number | null>(null);
+  const [shelfScanCode, setShelfScanCode] = useState('');
+  const [shelfScanMode, setShelfScanMode] = useState<'in' | 'out'>('in');
   const barcodeRef = useRef<SVGSVGElement>(null);
   const { toast } = useToast();
 
@@ -209,7 +212,18 @@ export default function Staff() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/staff/auctions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/shelves'] });
       toast({ title: 'Item deleted' });
+    },
+  });
+
+  const updateAuctionShelfMutation = useMutation({
+    mutationFn: async ({ id, shelfId }: { id: number; shelfId: number | null }) => {
+      await apiRequest('PATCH', `/api/staff/auctions/${id}/shelf`, { shelfId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/staff/auctions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/shelves'] });
     },
   });
 
@@ -896,6 +910,189 @@ export default function Staff() {
         </div>
       )}
 
+      {activeTab === 'shelves' && (
+        <div className="max-w-2xl mx-auto p-4 space-y-6">
+          <header className="pt-2">
+            <div className="flex items-center justify-between mb-1">
+              <h1 className="text-2xl font-bold tracking-tight">Shelves</h1>
+              <Badge variant="secondary" className="font-mono text-xs">
+                {shelves.length} shelves
+              </Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">Track items across shelf locations</p>
+          </header>
+
+          {selectedShelf === null ? (
+            <>
+              <div className="grid grid-cols-4 gap-2">
+                {shelves.map((shelf) => {
+                  const itemsOnShelf = auctions.filter(a => a.shelfId === shelf.id);
+                  return (
+                    <button
+                      key={shelf.id}
+                      onClick={() => setSelectedShelf(shelf.id)}
+                      className="p-3 rounded-xl border bg-card hover-elevate text-center transition-all"
+                      data-testid={`button-shelf-${shelf.id}`}
+                    >
+                      <div className="font-mono font-bold text-lg">{shelf.code}</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {itemsOnShelf.length} items
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedShelf(null);
+                    setShelfScanCode('');
+                  }}
+                  data-testid="button-back-shelves"
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Back
+                </Button>
+                <div className="flex-1">
+                  <h2 className="font-bold text-lg">
+                    {shelves.find(s => s.id === selectedShelf)?.name}
+                  </h2>
+                  <span className="font-mono text-sm text-muted-foreground">
+                    {shelves.find(s => s.id === selectedShelf)?.code}
+                  </span>
+                </div>
+              </div>
+
+              <Card>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex gap-2">
+                    <Button
+                      variant={shelfScanMode === 'in' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setShelfScanMode('in')}
+                      className="flex-1"
+                      data-testid="button-scan-in"
+                    >
+                      <LogIn className="w-4 h-4 mr-1" />
+                      Scan In
+                    </Button>
+                    <Button
+                      variant={shelfScanMode === 'out' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setShelfScanMode('out')}
+                      className="flex-1"
+                      data-testid="button-scan-out"
+                    >
+                      <LogOut className="w-4 h-4 mr-1" />
+                      Scan Out
+                    </Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        value={shelfScanCode}
+                        onChange={(e) => setShelfScanCode(e.target.value)}
+                        placeholder={shelfScanMode === 'in' ? 'Scan to add to shelf...' : 'Scan to remove from shelf...'}
+                        disabled={updateAuctionShelfMutation.isPending}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && shelfScanCode.trim() && !updateAuctionShelfMutation.isPending) {
+                            const searchCode = shelfScanCode.trim();
+                            const item = auctions.find(a => 
+                              (a.upc && a.upc === searchCode) || 
+                              (a.internalCode && a.internalCode === searchCode)
+                            );
+                            if (item) {
+                              if (shelfScanMode === 'in') {
+                                updateAuctionShelfMutation.mutate(
+                                  { id: item.id, shelfId: selectedShelf },
+                                  { onSuccess: () => toast({ title: `Moved "${item.title.slice(0, 30)}..." to this shelf` }) }
+                                );
+                              } else {
+                                updateAuctionShelfMutation.mutate(
+                                  { id: item.id, shelfId: null },
+                                  { onSuccess: () => toast({ title: `Removed "${item.title.slice(0, 30)}..." from shelf` }) }
+                                );
+                              }
+                            } else {
+                              toast({ title: 'Item not found in inventory', variant: 'destructive' });
+                            }
+                            setShelfScanCode('');
+                          }
+                        }}
+                        className="pl-9"
+                        autoFocus
+                        data-testid="input-shelf-scan"
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-muted-foreground">
+                  Items on this shelf ({auctions.filter(a => a.shelfId === selectedShelf).length})
+                </div>
+                {auctions.filter(a => a.shelfId === selectedShelf).length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Package className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No items on this shelf</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {auctions.filter(a => a.shelfId === selectedShelf).map((auction) => (
+                      <Card key={auction.id} className="overflow-hidden">
+                        <CardContent className="p-0">
+                          <div className="flex items-center">
+                            <div className="w-14 h-14 bg-muted flex items-center justify-center shrink-0">
+                              {auction.image ? (
+                                <img 
+                                  src={auction.image} 
+                                  alt={auction.title}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <Package className="w-5 h-5 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div className="flex-1 p-2 min-w-0">
+                              <div className="font-medium text-sm truncate">{auction.title}</div>
+                              <div className="text-xs text-muted-foreground font-mono">
+                                {auction.internalCode || auction.upc}
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="mr-2"
+                              disabled={updateAuctionShelfMutation.isPending}
+                              onClick={() => {
+                                updateAuctionShelfMutation.mutate(
+                                  { id: auction.id, shelfId: null },
+                                  { onSuccess: () => toast({ title: 'Removed from shelf' }) }
+                                );
+                              }}
+                              data-testid={`button-remove-${auction.id}`}
+                            >
+                              <LogOut className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Bottom Tab Bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-background border-t safe-area-pb">
         <div className="max-w-2xl mx-auto flex">
@@ -934,6 +1131,18 @@ export default function Staff() {
           >
             <Truck className="w-5 h-5" />
             <span className="text-xs font-medium">Fulfillment</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('shelves')}
+            className={`flex-1 flex flex-col items-center gap-1 py-3 transition-colors ${
+              activeTab === 'shelves' 
+                ? 'text-primary' 
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+            data-testid="tab-shelves"
+          >
+            <Grid3X3 className="w-5 h-5" />
+            <span className="text-xs font-medium">Shelves</span>
           </button>
         </div>
       </div>
