@@ -1,6 +1,6 @@
-import { users, bids, watchlist, auctions, tags, auctionTags, shelves, type User, type UpsertUser, type Bid, type InsertBid, type Watchlist, type InsertWatchlist, type Auction, type InsertAuction, type Tag, type InsertTag, type AuctionTag, type Shelf, type InsertShelf } from "@shared/schema";
+import { users, bids, watchlist, auctions, tags, auctionTags, shelves, routingConfig, brandRoutingStats, type User, type UpsertUser, type Bid, type InsertBid, type Watchlist, type InsertWatchlist, type Auction, type InsertAuction, type Tag, type InsertTag, type AuctionTag, type Shelf, type InsertShelf, type RoutingConfig, type BrandRoutingStat } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, like, inArray } from "drizzle-orm";
+import { eq, desc, and, like, inArray, sql } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -30,6 +30,20 @@ export interface IStorage {
   createShelf(shelf: InsertShelf): Promise<Shelf>;
   updateAuctionShelf(auctionId: number, shelfId: number | null): Promise<Auction | undefined>;
   seedShelves(): Promise<void>;
+  getRoutingConfig(): Promise<RoutingConfig>;
+  seedRoutingConfig(): Promise<void>;
+  getBrandRoutingStats(brand: string): Promise<BrandRoutingStat | undefined>;
+  incrementBrandRoutingStats(brand: string, platform: 'whatnot' | 'other'): Promise<void>;
+  updateAuctionRouting(id: number, data: {
+    condition?: string | null;
+    weightOunces?: number | null;
+    stockQuantity?: number;
+    routingPrimary?: string | null;
+    routingSecondary?: string | null;
+    routingScores?: unknown;
+    routingDisqualifications?: unknown;
+    needsReview?: number;
+  }): Promise<Auction | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -247,6 +261,73 @@ export class DatabaseStorage implements IStorage {
   async getShelfByCode(code: string): Promise<Shelf | undefined> {
     const [shelf] = await db.select().from(shelves).where(eq(shelves.code, code));
     return shelf;
+  }
+
+  async getRoutingConfig(): Promise<RoutingConfig> {
+    const [config] = await db.select().from(routingConfig).limit(1);
+    if (!config) {
+      await this.seedRoutingConfig();
+      const [newConfig] = await db.select().from(routingConfig).limit(1);
+      return newConfig;
+    }
+    return config;
+  }
+
+  async seedRoutingConfig(): Promise<void> {
+    const existing = await db.select().from(routingConfig).limit(1);
+    if (existing.length === 0) {
+      await db.insert(routingConfig).values({
+        heavyWeightOunces: 238,
+        highValueBrands: ["LEGO", "Nike", "Apple", "Sony", "Nintendo"],
+        blockedAmazonBrands: [],
+        whatnotBrandRatio: 10,
+      });
+    }
+  }
+
+  async getBrandRoutingStats(brand: string): Promise<BrandRoutingStat | undefined> {
+    const normalizedBrand = brand.toLowerCase();
+    const [stats] = await db.select().from(brandRoutingStats).where(
+      sql`LOWER(${brandRoutingStats.brand}) = ${normalizedBrand}`
+    );
+    return stats;
+  }
+
+  async incrementBrandRoutingStats(brand: string, platform: 'whatnot' | 'other'): Promise<void> {
+    const existing = await this.getBrandRoutingStats(brand);
+    if (existing) {
+      if (platform === 'whatnot') {
+        await db.update(brandRoutingStats).set({
+          whatnotCount: existing.whatnotCount + 1,
+          updatedAt: new Date(),
+        }).where(eq(brandRoutingStats.id, existing.id));
+      } else {
+        await db.update(brandRoutingStats).set({
+          otherPlatformCount: existing.otherPlatformCount + 1,
+          updatedAt: new Date(),
+        }).where(eq(brandRoutingStats.id, existing.id));
+      }
+    } else {
+      await db.insert(brandRoutingStats).values({
+        brand,
+        whatnotCount: platform === 'whatnot' ? 1 : 0,
+        otherPlatformCount: platform === 'other' ? 1 : 0,
+      });
+    }
+  }
+
+  async updateAuctionRouting(id: number, data: {
+    condition?: string | null;
+    weightOunces?: number | null;
+    stockQuantity?: number;
+    routingPrimary?: string | null;
+    routingSecondary?: string | null;
+    routingScores?: unknown;
+    routingDisqualifications?: unknown;
+    needsReview?: number;
+  }): Promise<Auction | undefined> {
+    const [updated] = await db.update(auctions).set(data).where(eq(auctions.id, id)).returning();
+    return updated;
   }
 }
 

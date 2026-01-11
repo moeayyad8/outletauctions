@@ -82,6 +82,8 @@ export const auctions = pgTable("auctions", {
   title: varchar("title", { length: 500 }).notNull(),
   description: text("description"),
   image: varchar("image", { length: 1000 }),
+  brand: varchar("brand", { length: 200 }),
+  category: varchar("category", { length: 200 }),
   retailPrice: integer("retail_price"),
   startingBid: integer("starting_bid").notNull().default(1),
   currentBid: integer("current_bid").notNull().default(0),
@@ -95,6 +97,14 @@ export const auctions = pgTable("auctions", {
   externalPayload: jsonb("external_payload"),
   lastSyncAt: timestamp("last_sync_at"),
   shelfId: integer("shelf_id"),
+  condition: varchar("condition", { length: 20 }),
+  weightOunces: integer("weight_ounces"),
+  stockQuantity: integer("stock_quantity").notNull().default(1),
+  routingPrimary: varchar("routing_primary", { length: 20 }),
+  routingSecondary: varchar("routing_secondary", { length: 20 }),
+  routingScores: jsonb("routing_scores"),
+  routingDisqualifications: jsonb("routing_disqualifications"),
+  needsReview: integer("needs_review").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -153,3 +163,41 @@ export const insertShelfSchema = createInsertSchema(shelves).omit({
 });
 export type InsertShelf = z.infer<typeof insertShelfSchema>;
 export type Shelf = typeof shelves.$inferSelect;
+
+// Routing configuration table
+export const routingConfig = pgTable("routing_config", {
+  id: serial("id").primaryKey(),
+  heavyWeightOunces: integer("heavy_weight_ounces").notNull().default(238),
+  highValueBrands: jsonb("high_value_brands").notNull().default(sql`'["LEGO", "Nike", "Apple", "Sony", "Nintendo"]'::jsonb`),
+  blockedAmazonBrands: jsonb("blocked_amazon_brands").notNull().default(sql`'[]'::jsonb`),
+  whatnotBrandRatio: integer("whatnot_brand_ratio").notNull().default(10),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type RoutingConfig = typeof routingConfig.$inferSelect;
+
+// Brand routing stats for 10:1 ratio tracking
+export const brandRoutingStats = pgTable("brand_routing_stats", {
+  id: serial("id").primaryKey(),
+  brand: varchar("brand", { length: 200 }).notNull().unique(),
+  whatnotCount: integer("whatnot_count").notNull().default(0),
+  otherPlatformCount: integer("other_platform_count").notNull().default(0),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type BrandRoutingStat = typeof brandRoutingStats.$inferSelect;
+
+// Condition options for items
+export const CONDITION_OPTIONS = [
+  "new",
+  "like_new", 
+  "good",
+  "acceptable",
+  "parts_damaged"
+] as const;
+
+export type ItemCondition = typeof CONDITION_OPTIONS[number];
+
+// Platform options
+export const PLATFORM_OPTIONS = ["whatnot", "ebay", "amazon"] as const;
+export type Platform = typeof PLATFORM_OPTIONS[number];

@@ -5,13 +5,15 @@ import { setupAuth, isAuthenticated } from "./replitAuth";
 import { insertBidSchema, insertWatchlistSchema, insertAuctionSchema, insertTagSchema } from "@shared/schema";
 import { scanCode } from "./upcService";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
+import { calculateRouting, getRoutingInputFromAuction } from "./routingService";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   await setupAuth(app);
   registerObjectStorageRoutes(app);
   
-  // Seed shelves on startup
+  // Seed shelves and routing config on startup
   await storage.seedShelves();
+  await storage.seedRoutingConfig();
 
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
@@ -113,7 +115,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const auction = await storage.createAuction(auctionData);
-      res.json(auction);
+      
+      // Calculate routing for the new auction
+      const config = await storage.getRoutingConfig();
+      const upcMatched = !!(auction.upc && auction.title && !auction.title.startsWith('Unidentified'));
+      
+      // Get brand stats for high-value brand quota check
+      let brandStats = null;
+      if (auction.brand) {
+        brandStats = await storage.getBrandRoutingStats(auction.brand);
+      }
+      
+      const routingInput = getRoutingInputFromAuction(auction, upcMatched);
+      const routingResult = calculateRouting(routingInput, config, brandStats ? {
+        whatnotCount: brandStats.whatnotCount,
+        otherPlatformCount: brandStats.otherPlatformCount
+      } : null);
+      
+      // Update auction with routing info
+      const updatedAuction = await storage.updateAuctionRouting(auction.id, {
+        routingPrimary: routingResult.primary,
+        routingSecondary: routingResult.secondary,
+        routingScores: routingResult.scores,
+        routingDisqualifications: routingResult.disqualifications,
+        needsReview: routingResult.needsReview ? 1 : 0,
+      });
+      
+      // Track brand routing stats for high-value brands
+      if (auction.brand && routingResult.primary) {
+        const highValueBrands = (config.highValueBrands as string[]) || [];
+        const isHighValueBrand = highValueBrands.some(b => 
+          b.toLowerCase() === auction.brand!.toLowerCase()
+        );
+        if (isHighValueBrand) {
+          await storage.incrementBrandRoutingStats(
+            auction.brand, 
+            routingResult.primary === 'whatnot' ? 'whatnot' : 'other'
+          );
+        }
+      }
+      
+      res.json(updatedAuction || auction);
     } catch (error) {
       console.error("Error creating auction:", error);
       res.status(400).json({ message: "Failed to create auction" });
@@ -264,6 +306,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting auction:", error);
       res.status(500).json({ message: "Failed to delete auction" });
+    }
+  });
+
+  // Update auction routing info (condition, weight, quantity) and recalculate
+  app.patch('/api/staff/auctions/:id/routing', async (req, res) => {
+    try {
+      const auctionId = parseInt(req.params.id);
+      const { condition, weightOunces, stockQuantity, needsReview } = req.body;
+      
+      if (isNaN(auctionId)) {
+        return res.status(400).json({ message: "Invalid auction ID" });
+      }
+      
+      const auction = await storage.getAuction(auctionId);
+      if (!auction) {
+        return res.status(404).json({ message: "Auction not found" });
+      }
+      
+      // First update the item fields
+      const updateData: any = {};
+      if (condition !== undefined) updateData.condition = condition;
+      if (weightOunces !== undefined) updateData.weightOunces = weightOunces;
+      if (stockQuantity !== undefined) updateData.stockQuantity = stockQuantity;
+      if (needsReview !== undefined) updateData.needsReview = needsReview;
+      
+      // Get merged auction data for routing calculation
+      const mergedAuction = { ...auction, ...updateData };
+      
+      // Recalculate routing
+      const config = await storage.getRoutingConfig();
+      const upcMatched = !!(mergedAuction.upc && mergedAuction.title && !mergedAuction.title.startsWith('Unidentified'));
+      
+      let brandStats = null;
+      if (mergedAuction.brand) {
+        brandStats = await storage.getBrandRoutingStats(mergedAuction.brand);
+      }
+      
+      const routingInput = getRoutingInputFromAuction(mergedAuction, upcMatched);
+      const routingResult = calculateRouting(routingInput, config, brandStats ? {
+        whatnotCount: brandStats.whatnotCount,
+        otherPlatformCount: brandStats.otherPlatformCount
+      } : null);
+      
+      // Update with new routing
+      updateData.routingPrimary = routingResult.primary;
+      updateData.routingSecondary = routingResult.secondary;
+      updateData.routingScores = routingResult.scores;
+      updateData.routingDisqualifications = routingResult.disqualifications;
+      if (needsReview === undefined) {
+        updateData.needsReview = routingResult.needsReview ? 1 : 0;
+      }
+      
+      const updated = await storage.updateAuctionRouting(auctionId, updateData);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating auction routing:", error);
+      res.status(500).json({ message: "Failed to update routing" });
+    }
+  });
+
+  // Get routing configuration
+  app.get('/api/staff/routing-config', async (req, res) => {
+    try {
+      const config = await storage.getRoutingConfig();
+      res.json(config);
+    } catch (error) {
+      console.error("Error fetching routing config:", error);
+      res.status(500).json({ message: "Failed to fetch routing config" });
     }
   });
 
