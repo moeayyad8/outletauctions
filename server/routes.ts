@@ -151,16 +151,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Shelf location is required" });
       }
       
+      // Require brandTier, condition, and weightClass for proper routing
+      if (!auctionData.brandTier) {
+        return res.status(400).json({ message: "Brand Tier is required (A, B, or C)" });
+      }
+      if (!auctionData.condition) {
+        return res.status(400).json({ message: "Condition is required" });
+      }
+      if (!auctionData.weightClass) {
+        return res.status(400).json({ message: "Weight Class is required" });
+      }
+      
       const auction = await storage.createAuction(auctionData);
       
       // Calculate routing for the new auction
       const config = await storage.getRoutingConfig();
       const upcMatched = !!(auction.upc && auction.title && !auction.title.startsWith('Unidentified'));
       
-      // Get brand stats for high-value brand quota check
+      // Get brand stats for Tier A (premium brands) quota check
       let brandStats = null;
-      if (auction.brand) {
-        brandStats = await storage.getBrandRoutingStats(auction.brand);
+      if (auction.brandTier === "A") {
+        brandStats = await storage.getBrandRoutingStats("TIER_A");
       }
       
       const routingInput = getRoutingInputFromAuction(auction, upcMatched);
@@ -178,18 +189,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         needsReview: routingResult.needsReview ? 1 : 0,
       });
       
-      // Track brand routing stats for high-value brands
-      if (auction.brand && routingResult.primary) {
-        const highValueBrands = (config.highValueBrands as string[]) || [];
-        const isHighValueBrand = highValueBrands.some(b => 
-          b.toLowerCase() === auction.brand!.toLowerCase()
+      // Track Tier A brand routing stats for 10:1 quota
+      if (auction.brandTier === "A" && routingResult.primary) {
+        await storage.incrementBrandRoutingStats(
+          "TIER_A", 
+          routingResult.primary === 'whatnot' ? 'whatnot' : 'other'
         );
-        if (isHighValueBrand) {
-          await storage.incrementBrandRoutingStats(
-            auction.brand, 
-            routingResult.primary === 'whatnot' ? 'whatnot' : 'other'
-          );
-        }
       }
       
       res.json(updatedAuction || auction);
@@ -375,9 +380,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const config = await storage.getRoutingConfig();
       const upcMatched = !!(mergedAuction.upc && mergedAuction.title && !mergedAuction.title.startsWith('Unidentified'));
       
+      // Get Tier A stats for quota check
       let brandStats = null;
-      if (mergedAuction.brand) {
-        brandStats = await storage.getBrandRoutingStats(mergedAuction.brand);
+      if (mergedAuction.brandTier === "A") {
+        brandStats = await storage.getBrandRoutingStats("TIER_A");
       }
       
       const routingInput = getRoutingInputFromAuction(mergedAuction, upcMatched);

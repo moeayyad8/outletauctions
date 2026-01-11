@@ -206,39 +206,20 @@ export default function Staff() {
     mutationFn: async (codeToScan: string) => {
       const res = await apiRequest('POST', '/api/scan', { code: codeToScan });
       const scanData: ScanResult = await res.json();
-      
-      // Fetch routing preview based on scan data (convert price to cents for backend)
-      let routingData: RoutingResult | null = null;
-      try {
-        const routingRes = await apiRequest('POST', '/api/staff/routing-preview', {
-          brand: scanData.brand,
-          category: scanData.category,
-          retailPrice: scanData.highestPrice ? Math.round(scanData.highestPrice * 100) : null,
-          upcMatched: scanData.lookupStatus === 'SUCCESS'
-        });
-        if (routingRes.ok) {
-          routingData = await routingRes.json();
-        }
-      } catch (e) {
-        console.error('Routing preview failed, using default:', e);
-      }
-      
-      return { scanData, routingData };
+      // Don't fetch routing preview on scan - required fields (brandTier, condition, weightClass) 
+      // are not known yet. User must set them, then routing will be calculated.
+      return { scanData };
     },
-    onSuccess: ({ scanData, routingData }) => {
-      // Map routing primary to destination type (default to auction if no routing)
-      let destination: DestinationType = 'auction';
-      if (routingData?.primary === 'ebay') destination = 'ebay';
-      else if (routingData?.primary === 'amazon') destination = 'amazon';
-      
+    onSuccess: ({ scanData }) => {
+      // Default to auction until user sets required fields and routing is calculated
       const newItem: BatchItem = {
         ...scanData,
         customImage: null,
         selectedTags: [],
         id: `${scanData.code}-${Date.now()}`,
-        destination,
+        destination: 'auction',
         shelfId: null,
-        routing: routingData,
+        routing: null, // Will be set when user fills required fields
         brandTier: null,
         condition: null,
         weightClass: null,
@@ -264,30 +245,10 @@ export default function Staff() {
       const res = await fetch('/api/staff/next-internal-code');
       if (!res.ok) throw new Error('Failed');
       const codeData = await res.json();
-      
-      // Fetch routing preview for a generic item
-      let routingData: RoutingResult | null = null;
-      try {
-        const routingRes = await apiRequest('POST', '/api/staff/routing-preview', {
-          brand: null,
-          category: null,
-          retailPrice: null,
-          upcMatched: false
-        });
-        if (routingRes.ok) {
-          routingData = await routingRes.json();
-        }
-      } catch (e) {
-        console.error('Routing preview failed, using default:', e);
-      }
-      
-      return { codeData, routingData };
+      // Don't fetch routing preview - required fields must be set by user first
+      return { codeData };
     },
-    onSuccess: ({ codeData, routingData }) => {
-      let destination: DestinationType = 'auction';
-      if (routingData?.primary === 'ebay') destination = 'ebay';
-      else if (routingData?.primary === 'amazon') destination = 'amazon';
-      
+    onSuccess: ({ codeData }) => {
       const newItem: BatchItem = {
         code: codeData.code,
         codeType: "UNKNOWN",
@@ -300,9 +261,9 @@ export default function Staff() {
         customImage: null,
         selectedTags: [],
         id: `${codeData.code}-${Date.now()}`,
-        destination,
+        destination: 'auction',
         shelfId: null,
-        routing: routingData,
+        routing: null, // Will be set when user fills required fields
         brandTier: null,
         condition: null,
         weightClass: null,
@@ -524,6 +485,22 @@ export default function Staff() {
       toast({ 
         title: 'Select location for all items', 
         description: `${itemsWithoutShelf.length} item(s) need a shelf location`,
+        variant: 'destructive' 
+      });
+      return;
+    }
+    
+    // Check for required routing fields
+    const itemsMissingFields = batch.filter(item => !item.brandTier || !item.condition || !item.weightClass);
+    if (itemsMissingFields.length > 0) {
+      const missingFields: string[] = [];
+      if (itemsMissingFields.some(i => !i.brandTier)) missingFields.push('Brand Tier');
+      if (itemsMissingFields.some(i => !i.condition)) missingFields.push('Condition');
+      if (itemsMissingFields.some(i => !i.weightClass)) missingFields.push('Weight Class');
+      
+      toast({ 
+        title: 'Complete all required fields', 
+        description: `${itemsMissingFields.length} item(s) missing: ${missingFields.join(', ')}`,
         variant: 'destructive' 
       });
       return;
@@ -831,6 +808,15 @@ export default function Staff() {
                               </Badge>
                             ))}
                           </div>
+                          
+                          {!item.routing && (
+                            <div className="mt-2 pt-2 border-t" data-testid={`routing-pending-${item.id}`}>
+                              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                <AlertTriangle className="w-3 h-3" />
+                                <span>Set Tier, Condition, Weight to see routing</span>
+                              </div>
+                            </div>
+                          )}
                           
                           {item.routing && item.routing.missingRequiredFields?.length > 0 && (
                             <div className="mt-2 pt-2 border-t" data-testid={`routing-missing-${item.id}`}>
