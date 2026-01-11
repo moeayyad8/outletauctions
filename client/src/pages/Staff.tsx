@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useUpload } from '@/hooks/use-upload';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel, Store, ExternalLink, Grid3X3, ArrowRightLeft, LogIn, LogOut } from 'lucide-react';
+import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel, Store, ExternalLink, Grid3X3, ArrowRightLeft, LogIn, LogOut, AlertTriangle, CheckCircle2, Scale, ChevronDown, ChevronUp, Flag } from 'lucide-react';
 import { SiAmazon, SiEbay } from 'react-icons/si';
 import JsBarcode from 'jsbarcode';
 import type { Auction, Tag as TagType, Shelf } from '@shared/schema';
@@ -38,6 +38,46 @@ interface BatchItem extends ScanResult {
 
 type TabType = 'scanner' | 'inventory' | 'fulfillment' | 'shelves';
 
+function RoutingScoresDisplay({ 
+  scores, 
+  disquals, 
+  primaryPlatform 
+}: { 
+  scores: { whatnot: number; ebay: number; amazon: number };
+  disquals: { whatnot: string[]; ebay: string[]; amazon: string[] } | null;
+  primaryPlatform: string | null;
+}) {
+  return (
+    <div className="bg-muted/30 rounded-lg p-2">
+      <div className="text-[10px] text-muted-foreground mb-1.5">Routing Scores</div>
+      <div className="flex gap-2">
+        {(['whatnot', 'ebay', 'amazon'] as const).map((platform) => {
+          const score = scores[platform];
+          const isDisqualified = disquals && disquals[platform]?.length > 0;
+          const isPrimary = primaryPlatform === platform;
+          const disqualReasons = isDisqualified ? disquals[platform].join(', ') : '';
+          
+          return (
+            <div 
+              key={platform}
+              className={`flex-1 text-center p-1.5 rounded ${
+                isDisqualified ? 'bg-red-50 text-red-600 line-through opacity-50' :
+                isPrimary ? 'bg-green-50 text-green-700 font-semibold' : 'bg-background'
+              }`}
+              title={disqualReasons}
+            >
+              <div className="text-[10px] uppercase opacity-70">
+                {platform === 'whatnot' ? 'W' : platform === 'ebay' ? 'E' : 'A'}
+              </div>
+              <div className="text-sm font-mono">{score}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function Staff() {
   const [activeTab, setActiveTab] = useState<TabType>('scanner');
   const [code, setCode] = useState('');
@@ -51,6 +91,7 @@ export default function Staff() {
   const [selectedShelf, setSelectedShelf] = useState<number | null>(null);
   const [shelfScanCode, setShelfScanCode] = useState('');
   const [shelfScanMode, setShelfScanMode] = useState<'in' | 'out'>('in');
+  const [expandedItem, setExpandedItem] = useState<number | null>(null);
   const barcodeRef = useRef<SVGSVGElement>(null);
   const { toast } = useToast();
 
@@ -226,6 +267,28 @@ export default function Staff() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/staff/auctions'] });
       queryClient.invalidateQueries({ queryKey: ['/api/shelves'] });
+    },
+  });
+
+  const updateRoutingMutation = useMutation({
+    mutationFn: async ({ id, condition, weightOunces, stockQuantity, needsReview }: { 
+      id: number; 
+      condition?: string; 
+      weightOunces?: number;
+      stockQuantity?: number;
+      needsReview?: number;
+    }) => {
+      const response = await apiRequest('PATCH', `/api/staff/auctions/${id}/routing`, { 
+        condition, 
+        weightOunces,
+        stockQuantity,
+        needsReview
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/staff/auctions'] });
+      toast({ title: 'Routing updated' });
     },
   });
 
@@ -736,8 +799,14 @@ export default function Staff() {
                               Error
                             </Badge>
                           )}
+                          {auction.needsReview === 1 && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-yellow-500 text-yellow-600 bg-yellow-50">
+                              <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />
+                              Review
+                            </Badge>
+                          )}
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
                           <span className="font-semibold text-foreground">
                             {auction.retailPrice ? `$${(auction.retailPrice / 100).toFixed(2)}` : '—'}
                           </span>
@@ -747,6 +816,26 @@ export default function Staff() {
                               <MapPin className="w-2.5 h-2.5 mr-0.5" />
                               {shelves.find(s => s.id === auction.shelfId)?.name || `Shelf ${auction.shelfId}`}
                             </Badge>
+                          )}
+                          {auction.routingPrimary && (
+                            <Badge 
+                              variant="secondary" 
+                              className={`text-[10px] px-1.5 py-0 ${
+                                auction.routingPrimary === 'whatnot' ? 'bg-purple-100 text-purple-700 border-purple-300' :
+                                auction.routingPrimary === 'ebay' ? 'bg-blue-100 text-blue-700 border-blue-300' :
+                                'bg-orange-100 text-orange-700 border-orange-300'
+                              }`}
+                            >
+                              {auction.routingPrimary === 'whatnot' ? 'W' : auction.routingPrimary === 'ebay' ? 'E' : 'A'}
+                              {auction.routingSecondary && (
+                                <span className="opacity-50 ml-0.5">
+                                  /{auction.routingSecondary === 'whatnot' ? 'W' : auction.routingSecondary === 'ebay' ? 'E' : 'A'}
+                                </span>
+                              )}
+                            </Badge>
+                          )}
+                          {auction.condition && (
+                            <span className="text-[10px] capitalize">{auction.condition.replace('_', ' ')}</span>
                           )}
                         </div>
                       </div>
@@ -794,6 +883,15 @@ export default function Staff() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setExpandedItem(expandedItem === auction.id ? null : auction.id)}
+                          data-testid={`button-expand-${auction.id}`}
+                        >
+                          {expandedItem === auction.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
                           onClick={() => handleDeleteAuction(auction.id)}
                           data-testid={`button-delete-${auction.id}`}
@@ -802,6 +900,97 @@ export default function Staff() {
                         </Button>
                       </div>
                     </div>
+                    
+                    {expandedItem === auction.id && (
+                      <div className="mt-3 pt-3 border-t border-border/50 space-y-3">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground block mb-1">Condition</label>
+                            <Select
+                              value={auction.condition || ''}
+                              onValueChange={(value) => updateRoutingMutation.mutate({ id: auction.id, condition: value })}
+                            >
+                              <SelectTrigger className="h-8 text-xs" data-testid={`select-condition-${auction.id}`}>
+                                <SelectValue placeholder="Select condition" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="new">New</SelectItem>
+                                <SelectItem value="like_new">Like New</SelectItem>
+                                <SelectItem value="good">Good</SelectItem>
+                                <SelectItem value="acceptable">Acceptable</SelectItem>
+                                <SelectItem value="parts_damaged">Parts/Damaged</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground block mb-1">Weight (lbs)</label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              className="h-8 text-xs"
+                              placeholder="Optional"
+                              defaultValue={auction.weightOunces ? (auction.weightOunces / 16).toFixed(1) : ''}
+                              onBlur={(e) => {
+                                const lbs = parseFloat(e.target.value);
+                                if (!isNaN(lbs) && lbs > 0) {
+                                  updateRoutingMutation.mutate({ id: auction.id, weightOunces: Math.round(lbs * 16) });
+                                }
+                              }}
+                              data-testid={`input-weight-${auction.id}`}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground block mb-1">Stock Qty</label>
+                            <Input
+                              type="number"
+                              min="1"
+                              className="h-8 text-xs"
+                              defaultValue={auction.stockQuantity || 1}
+                              onBlur={(e) => {
+                                const qty = parseInt(e.target.value);
+                                if (!isNaN(qty) && qty >= 1) {
+                                  updateRoutingMutation.mutate({ id: auction.id, stockQuantity: qty });
+                                }
+                              }}
+                              data-testid={`input-quantity-${auction.id}`}
+                            />
+                          </div>
+                          <div className="flex items-end">
+                            <Button
+                              variant={auction.needsReview === 1 ? "default" : "outline"}
+                              size="sm"
+                              className="h-8 text-xs w-full"
+                              onClick={() => updateRoutingMutation.mutate({ 
+                                id: auction.id, 
+                                needsReview: auction.needsReview === 1 ? 0 : 1 
+                              })}
+                              data-testid={`button-flag-review-${auction.id}`}
+                            >
+                              <Flag className="w-3 h-3 mr-1" />
+                              {auction.needsReview === 1 ? 'Flagged' : 'Flag Review'}
+                            </Button>
+                          </div>
+                        </div>
+
+                        {auction.routingScores ? (
+                          <RoutingScoresDisplay 
+                            scores={auction.routingScores as { whatnot: number; ebay: number; amazon: number }}
+                            disquals={auction.routingDisqualifications as { whatnot: string[]; ebay: string[]; amazon: string[] } | null}
+                            primaryPlatform={auction.routingPrimary}
+                          />
+                        ) : null}
+
+                        {auction.brand && (
+                          <div className="text-[10px] text-muted-foreground">
+                            Brand: <span className="text-foreground">{auction.brand}</span>
+                            {auction.category && <span className="ml-2">Category: <span className="text-foreground">{auction.category}</span></span>}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
