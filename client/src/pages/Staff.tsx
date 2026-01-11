@@ -28,12 +28,24 @@ interface ScanResult {
 
 type DestinationType = 'auction' | 'ebay' | 'amazon';
 
+interface RoutingResult {
+  primary: 'whatnot' | 'ebay' | 'amazon' | null;
+  secondary: 'whatnot' | 'ebay' | 'amazon' | null;
+  scores: { whatnot: number; ebay: number; amazon: number };
+  disqualifications: { whatnot: string[]; ebay: string[]; amazon: string[] };
+  needsReview: boolean;
+}
+
 interface BatchItem extends ScanResult {
   customImage: string | null;
   selectedTags: number[];
   id: string;
   destination: DestinationType;
   shelfId: number | null;
+  routing: RoutingResult | null;
+  condition: string | null;
+  weightOunces: number | null;
+  stockQuantity: number;
 }
 
 type TabType = 'scanner' | 'inventory' | 'fulfillment' | 'shelves';
@@ -186,22 +198,42 @@ export default function Staff() {
   const scanMutation = useMutation({
     mutationFn: async (codeToScan: string) => {
       const res = await apiRequest('POST', '/api/scan', { code: codeToScan });
-      return res.json();
+      const scanData: ScanResult = await res.json();
+      
+      // Fetch routing preview based on scan data
+      const routingRes = await apiRequest('POST', '/api/staff/routing-preview', {
+        brand: scanData.brand,
+        category: scanData.category,
+        retailPrice: scanData.highestPrice,
+        upcMatched: scanData.lookupStatus === 'SUCCESS'
+      });
+      const routingData: RoutingResult = await routingRes.json();
+      
+      return { scanData, routingData };
     },
-    onSuccess: (data: ScanResult) => {
+    onSuccess: ({ scanData, routingData }) => {
+      // Map routing primary to destination type
+      let destination: DestinationType = 'auction';
+      if (routingData.primary === 'ebay') destination = 'ebay';
+      else if (routingData.primary === 'amazon') destination = 'amazon';
+      
       const newItem: BatchItem = {
-        ...data,
+        ...scanData,
         customImage: null,
         selectedTags: [],
-        id: `${data.code}-${Date.now()}`,
-        destination: 'auction',
+        id: `${scanData.code}-${Date.now()}`,
+        destination,
         shelfId: null,
+        routing: routingData,
+        condition: null,
+        weightOunces: null,
+        stockQuantity: 1,
       };
       setBatch(prev => [newItem, ...prev]);
       setCode('');
       
-      if (data.lookupStatus === "SUCCESS") {
-        toast({ title: `Added: ${data.title.slice(0, 40)}...` });
+      if (scanData.lookupStatus === "SUCCESS") {
+        toast({ title: `Added: ${scanData.title.slice(0, 40)}...` });
       } else {
         toast({ title: 'Item needs details', description: 'Tap to add image/info' });
       }
@@ -215,11 +247,26 @@ export default function Staff() {
     mutationFn: async () => {
       const res = await fetch('/api/staff/next-internal-code');
       if (!res.ok) throw new Error('Failed');
-      return res.json();
+      const codeData = await res.json();
+      
+      // Fetch routing preview for a generic item
+      const routingRes = await apiRequest('POST', '/api/staff/routing-preview', {
+        brand: null,
+        category: null,
+        retailPrice: null,
+        upcMatched: false
+      });
+      const routingData: RoutingResult = await routingRes.json();
+      
+      return { codeData, routingData };
     },
-    onSuccess: (data: { code: string }) => {
+    onSuccess: ({ codeData, routingData }) => {
+      let destination: DestinationType = 'auction';
+      if (routingData.primary === 'ebay') destination = 'ebay';
+      else if (routingData.primary === 'amazon') destination = 'amazon';
+      
       const newItem: BatchItem = {
-        code: data.code,
+        code: codeData.code,
         codeType: "UNKNOWN",
         lookupStatus: "NEEDS_ENRICHMENT",
         title: `New Product`,
@@ -229,12 +276,16 @@ export default function Staff() {
         highestPrice: null,
         customImage: null,
         selectedTags: [],
-        id: `${data.code}-${Date.now()}`,
-        destination: 'auction',
+        id: `${codeData.code}-${Date.now()}`,
+        destination,
         shelfId: null,
+        routing: routingData,
+        condition: null,
+        weightOunces: null,
+        stockQuantity: 1,
       };
       setBatch(prev => [newItem, ...prev]);
-      toast({ title: `Generated: ${data.code}` });
+      toast({ title: `Generated: ${codeData.code}` });
     },
   });
 
@@ -649,6 +700,25 @@ export default function Staff() {
                               </Badge>
                             ))}
                           </div>
+                          
+                          {item.routing && (
+                            <div className="mt-2 pt-2 border-t">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[10px] text-muted-foreground">Routing:</span>
+                                <CompactRoutingScores 
+                                  scores={item.routing.scores}
+                                  disquals={item.routing.disqualifications}
+                                  primaryPlatform={item.routing.primary}
+                                />
+                              </div>
+                              {item.routing.needsReview && (
+                                <div className="flex items-center gap-1 mt-1 text-[10px] text-amber-600">
+                                  <AlertTriangle className="w-3 h-3" />
+                                  <span>Needs review - close scores</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
                           
                           <div className="flex gap-1 mt-2 pt-2 border-t">
                             <Button
