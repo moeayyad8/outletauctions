@@ -38,6 +38,33 @@ interface BatchItem extends ScanResult {
 
 type TabType = 'scanner' | 'inventory' | 'fulfillment' | 'shelves';
 
+function CompactRoutingScores({ 
+  scores, 
+  disquals, 
+  primaryPlatform 
+}: { 
+  scores: { whatnot: number; ebay: number; amazon: number };
+  disquals: { whatnot: string[]; ebay: string[]; amazon: string[] } | null;
+  primaryPlatform: string | null;
+}) {
+  return (
+    <div className="flex gap-0.5 font-mono text-[9px]">
+      <span className={`px-1 rounded ${
+        disquals?.whatnot?.length ? 'line-through opacity-40' :
+        primaryPlatform === 'whatnot' ? 'bg-primary/20 text-primary font-bold' : ''
+      }`} title={disquals?.whatnot?.join(', ')}>W:{scores.whatnot}</span>
+      <span className={`px-1 rounded ${
+        disquals?.ebay?.length ? 'line-through opacity-40' :
+        primaryPlatform === 'ebay' ? 'bg-primary/20 text-primary font-bold' : ''
+      }`} title={disquals?.ebay?.join(', ')}>E:{scores.ebay}</span>
+      <span className={`px-1 rounded ${
+        disquals?.amazon?.length ? 'line-through opacity-40' :
+        primaryPlatform === 'amazon' ? 'bg-primary/20 text-primary font-bold' : ''
+      }`} title={disquals?.amazon?.join(', ')}>A:{scores.amazon}</span>
+    </div>
+  );
+}
+
 function RoutingScoresDisplay({ 
   scores, 
   disquals, 
@@ -817,23 +844,13 @@ export default function Staff() {
                               {shelves.find(s => s.id === auction.shelfId)?.name || `Shelf ${auction.shelfId}`}
                             </Badge>
                           )}
-                          {auction.routingPrimary && (
-                            <Badge 
-                              variant="secondary" 
-                              className={`text-[10px] px-1.5 py-0 ${
-                                auction.routingPrimary === 'whatnot' ? 'bg-purple-100 text-purple-700 border-purple-300' :
-                                auction.routingPrimary === 'ebay' ? 'bg-blue-100 text-blue-700 border-blue-300' :
-                                'bg-orange-100 text-orange-700 border-orange-300'
-                              }`}
-                            >
-                              {auction.routingPrimary === 'whatnot' ? 'W' : auction.routingPrimary === 'ebay' ? 'E' : 'A'}
-                              {auction.routingSecondary && (
-                                <span className="opacity-50 ml-0.5">
-                                  /{auction.routingSecondary === 'whatnot' ? 'W' : auction.routingSecondary === 'ebay' ? 'E' : 'A'}
-                                </span>
-                              )}
-                            </Badge>
-                          )}
+                          {auction.routingScores ? (
+                            <CompactRoutingScores 
+                              scores={auction.routingScores as { whatnot: number; ebay: number; amazon: number }}
+                              disquals={auction.routingDisqualifications as { whatnot: string[]; ebay: string[]; amazon: string[] } | null}
+                              primaryPlatform={auction.routingPrimary}
+                            />
+                          ) : null}
                           {auction.condition && (
                             <span className="text-[10px] capitalize">{auction.condition.replace('_', ' ')}</span>
                           )}
