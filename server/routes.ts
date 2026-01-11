@@ -106,6 +106,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Calculate routing preview without creating an auction
+  app.post('/api/staff/routing-preview', async (req, res) => {
+    try {
+      const { brand, category, retailPrice, condition, weightOunces, stockQuantity, upcMatched } = req.body;
+      
+      const config = await storage.getRoutingConfig();
+      
+      // Get brand stats if brand is provided
+      let brandStats = null;
+      if (brand) {
+        brandStats = await storage.getBrandRoutingStats(brand);
+      }
+      
+      const routingInput = {
+        brand: brand || null,
+        category: category || null,
+        retailPrice: retailPrice || null,
+        condition: condition || null,
+        weightOunces: weightOunces || null,
+        stockQuantity: stockQuantity || 1,
+        upcMatched: upcMatched !== false
+      };
+      
+      const routingResult = calculateRouting(routingInput, config, brandStats ? {
+        whatnotCount: brandStats.whatnotCount,
+        otherPlatformCount: brandStats.otherPlatformCount
+      } : null);
+      
+      res.json(routingResult);
+    } catch (error) {
+      console.error("Error calculating routing preview:", error);
+      res.status(500).json({ message: "Failed to calculate routing" });
+    }
+  });
+
   app.post('/api/staff/auctions', async (req, res) => {
     try {
       const auctionData = insertAuctionSchema.parse(req.body);
