@@ -109,18 +109,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Calculate routing preview without creating an auction
   app.post('/api/staff/routing-preview', async (req, res) => {
     try {
-      const { brand, category, retailPrice, condition, weightOunces, stockQuantity, upcMatched } = req.body;
+      const { brandTier, weightClass, category, retailPrice, condition, weightOunces, stockQuantity, upcMatched } = req.body;
       
       const config = await storage.getRoutingConfig();
       
-      // Get brand stats if brand is provided
+      // Get brand stats for Tier A items (premium brands) to check 10:1 ratio
       let brandStats = null;
-      if (brand) {
-        brandStats = await storage.getBrandRoutingStats(brand);
+      if (brandTier === "A") {
+        // Use "TIER_A" as a generic key for tracking all Tier A items
+        brandStats = await storage.getBrandRoutingStats("TIER_A");
       }
       
       const routingInput = {
-        brand: brand || null,
+        brandTier: brandTier || null,
+        weightClass: weightClass || null,
         category: category || null,
         retailPrice: retailPrice || null,
         condition: condition || null,

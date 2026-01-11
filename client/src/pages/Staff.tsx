@@ -34,7 +34,12 @@ interface RoutingResult {
   scores: { whatnot: number; ebay: number; amazon: number };
   disqualifications: { whatnot: string[]; ebay: string[]; amazon: string[] };
   needsReview: boolean;
+  missingRequiredFields: string[];
 }
+
+type BrandTier = "A" | "B" | "C";
+type WeightClass = "light" | "medium" | "heavy";
+type ItemCondition = "new" | "like_new" | "good" | "acceptable" | "parts_damaged";
 
 interface BatchItem extends ScanResult {
   customImage: string | null;
@@ -43,7 +48,9 @@ interface BatchItem extends ScanResult {
   destination: DestinationType;
   shelfId: number | null;
   routing: RoutingResult | null;
-  condition: string | null;
+  brandTier: BrandTier | null;
+  condition: ItemCondition | null;
+  weightClass: WeightClass | null;
   weightOunces: number | null;
   stockQuantity: number;
 }
@@ -232,7 +239,9 @@ export default function Staff() {
         destination,
         shelfId: null,
         routing: routingData,
+        brandTier: null,
         condition: null,
+        weightClass: null,
         weightOunces: null,
         stockQuantity: 1,
       };
@@ -294,7 +303,9 @@ export default function Staff() {
         destination,
         shelfId: null,
         routing: routingData,
+        brandTier: null,
         condition: null,
+        weightClass: null,
         weightOunces: null,
         stockQuantity: 1,
       };
@@ -315,6 +326,53 @@ export default function Staff() {
     ));
   };
 
+  const updateItemAndRecalculateRouting = async (
+    id: string, 
+    updates: Partial<Pick<BatchItem, 'brandTier' | 'condition' | 'weightClass'>>
+  ) => {
+    const item = batch.find(i => i.id === id);
+    if (!item) return;
+
+    const updatedItem = { ...item, ...updates };
+    
+    try {
+      const routingRes = await apiRequest('POST', '/api/staff/routing-preview', {
+        brandTier: updatedItem.brandTier,
+        weightClass: updatedItem.weightClass,
+        category: updatedItem.category,
+        retailPrice: updatedItem.highestPrice ? Math.round(updatedItem.highestPrice * 100) : null,
+        condition: updatedItem.condition,
+        weightOunces: updatedItem.weightOunces,
+        stockQuantity: updatedItem.stockQuantity,
+        upcMatched: updatedItem.lookupStatus === 'SUCCESS'
+      });
+      
+      if (routingRes.ok) {
+        const routingData: RoutingResult = await routingRes.json();
+        
+        let destination: DestinationType = item.destination;
+        if (routingData.missingRequiredFields.length === 0 && routingData.primary) {
+          if (routingData.primary === 'ebay') destination = 'ebay';
+          else if (routingData.primary === 'amazon') destination = 'amazon';
+          else destination = 'auction';
+        }
+        
+        setBatch(prev => prev.map(i => 
+          i.id === id ? { ...i, ...updates, routing: routingData, destination } : i
+        ));
+      } else {
+        setBatch(prev => prev.map(i => 
+          i.id === id ? { ...i, ...updates } : i
+        ));
+      }
+    } catch (e) {
+      console.error('Routing recalc failed:', e);
+      setBatch(prev => prev.map(i => 
+        i.id === id ? { ...i, ...updates } : i
+      ));
+    }
+  };
+
   const createAuctionMutation = useMutation({
     mutationFn: async (item: BatchItem) => {
       const auctionData = {
@@ -329,6 +387,10 @@ export default function Staff() {
         status: 'draft',
         destination: item.destination,
         shelfId: item.shelfId,
+        brandTier: item.brandTier,
+        condition: item.condition,
+        weightClass: item.weightClass,
+        stockQuantity: item.stockQuantity,
       };
       const response = await apiRequest('POST', '/api/staff/auctions', auctionData);
       const auction = await response.json();
@@ -700,6 +762,61 @@ export default function Staff() {
                             </Select>
                           </div>
                           
+                          <div className="grid grid-cols-3 gap-1 mt-2 pt-2 border-t">
+                            <Select
+                              value={item.brandTier || ''}
+                              onValueChange={(val) => updateItemAndRecalculateRouting(item.id, { brandTier: val as BrandTier })}
+                            >
+                              <SelectTrigger 
+                                className={`h-7 text-[10px] ${!item.brandTier ? 'border-red-400 text-red-600' : ''}`}
+                                data-testid={`select-brand-tier-${item.id}`}
+                              >
+                                <SelectValue placeholder="Tier*" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="A">A - Premium</SelectItem>
+                                <SelectItem value="B">B - Name Brand</SelectItem>
+                                <SelectItem value="C">C - Private Label</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            
+                            <Select
+                              value={item.condition || ''}
+                              onValueChange={(val) => updateItemAndRecalculateRouting(item.id, { condition: val as ItemCondition })}
+                            >
+                              <SelectTrigger 
+                                className={`h-7 text-[10px] ${!item.condition ? 'border-red-400 text-red-600' : ''}`}
+                                data-testid={`select-condition-${item.id}`}
+                              >
+                                <SelectValue placeholder="Cond*" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="new">New</SelectItem>
+                                <SelectItem value="like_new">Like New</SelectItem>
+                                <SelectItem value="good">Good</SelectItem>
+                                <SelectItem value="acceptable">Acceptable</SelectItem>
+                                <SelectItem value="parts_damaged">Parts/Damaged</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            
+                            <Select
+                              value={item.weightClass || ''}
+                              onValueChange={(val) => updateItemAndRecalculateRouting(item.id, { weightClass: val as WeightClass })}
+                            >
+                              <SelectTrigger 
+                                className={`h-7 text-[10px] ${!item.weightClass ? 'border-red-400 text-red-600' : ''}`}
+                                data-testid={`select-weight-class-${item.id}`}
+                              >
+                                <SelectValue placeholder="Weight*" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="light">Light (&lt;5 lbs)</SelectItem>
+                                <SelectItem value="medium">Medium (5-14 lbs)</SelectItem>
+                                <SelectItem value="heavy">Heavy (15+ lbs)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          
                           <div className="flex gap-1 flex-wrap mt-1">
                             {[...locationTags, ...categoryTags].slice(0, 4).map(tag => (
                               <Badge
@@ -715,7 +832,16 @@ export default function Staff() {
                             ))}
                           </div>
                           
-                          {item.routing && (
+                          {item.routing && item.routing.missingRequiredFields?.length > 0 && (
+                            <div className="mt-2 pt-2 border-t" data-testid={`routing-missing-${item.id}`}>
+                              <div className="flex items-center gap-1 text-[10px] text-red-600">
+                                <AlertTriangle className="w-3 h-3" />
+                                <span>Set: {item.routing.missingRequiredFields.join(', ')}</span>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {item.routing && item.routing.missingRequiredFields?.length === 0 && (
                             <div className="mt-2 pt-2 border-t" data-testid={`routing-preview-${item.id}`}>
                               <div className="flex items-center justify-between gap-2">
                                 <span className="text-[10px] text-muted-foreground">Routing:</span>
