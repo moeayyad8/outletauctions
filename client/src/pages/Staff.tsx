@@ -61,8 +61,8 @@ function RoutingScoresDisplay({
             <div 
               key={platform}
               className={`flex-1 text-center p-1.5 rounded ${
-                isDisqualified ? 'bg-red-50 text-red-600 line-through opacity-50' :
-                isPrimary ? 'bg-green-50 text-green-700 font-semibold' : 'bg-background'
+                isDisqualified ? 'bg-destructive/10 dark:bg-destructive/20 text-destructive line-through opacity-50' :
+                isPrimary ? 'bg-primary/10 dark:bg-primary/20 text-primary font-semibold' : 'bg-background'
               }`}
               title={disqualReasons}
             >
@@ -962,7 +962,7 @@ export default function Staff() {
                             <Button
                               variant={auction.needsReview === 1 ? "default" : "outline"}
                               size="sm"
-                              className="h-8 text-xs w-full"
+                              className="w-full"
                               onClick={() => updateRoutingMutation.mutate({ 
                                 id: auction.id, 
                                 needsReview: auction.needsReview === 1 ? 0 : 1 
