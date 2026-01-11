@@ -99,6 +99,8 @@ export const auctions = pgTable("auctions", {
   shelfId: integer("shelf_id"),
   condition: varchar("condition", { length: 20 }),
   weightOunces: integer("weight_ounces"),
+  weightClass: varchar("weight_class", { length: 20 }),
+  brandTier: varchar("brand_tier", { length: 5 }),
   stockQuantity: integer("stock_quantity").notNull().default(1),
   routingPrimary: varchar("routing_primary", { length: 20 }),
   routingSecondary: varchar("routing_secondary", { length: 20 }),
@@ -197,6 +199,17 @@ export const CONDITION_OPTIONS = [
 ] as const;
 
 export type ItemCondition = typeof CONDITION_OPTIONS[number];
+
+// Brand Tier options (human-selected, not UPC-derived)
+// A = Premium brands (Nike, Adidas, LEGO, Apple) - penalized on Whatnot, forced to bundle
+// B = Recognizable name brands (Febreze, Mr Clean, Sharpie)  
+// C = Private label/white label (Amazon Basics, unbranded) - BLOCKED on Amazon
+export const BRAND_TIER_OPTIONS = ["A", "B", "C"] as const;
+export type BrandTier = typeof BRAND_TIER_OPTIONS[number];
+
+// Weight class options
+export const WEIGHT_CLASS_OPTIONS = ["light", "medium", "heavy"] as const;
+export type WeightClass = typeof WEIGHT_CLASS_OPTIONS[number];
 
 // Platform options
 export const PLATFORM_OPTIONS = ["whatnot", "ebay", "amazon"] as const;

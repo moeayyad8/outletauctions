@@ -1,4 +1,4 @@
-import type { Auction, RoutingConfig, BrandRoutingStat, Platform, ItemCondition } from "@shared/schema";
+import type { Auction, RoutingConfig, BrandRoutingStat, Platform, ItemCondition, BrandTier, WeightClass } from "@shared/schema";
 
 export interface RoutingScores {
   whatnot: number;
@@ -18,10 +18,12 @@ export interface RoutingResult {
   scores: RoutingScores;
   disqualifications: RoutingDisqualifications;
   needsReview: boolean;
+  missingRequiredFields: string[];
 }
 
-interface RoutingInput {
-  brand: string | null;
+export interface RoutingInput {
+  brandTier: BrandTier | null;
+  weightClass: WeightClass | null;
   category: string | null;
   retailPrice: number | null;
   condition: ItemCondition | null;
@@ -42,21 +44,37 @@ export function calculateRouting(
 ): RoutingResult {
   const scores: RoutingScores = { whatnot: 50, ebay: 50, amazon: 50 };
   const disqualifications: RoutingDisqualifications = { whatnot: [], ebay: [], amazon: [] };
+  const missingRequiredFields: string[] = [];
   
-  const highValueBrands = (config.highValueBrands as string[]) || [];
-  const blockedAmazonBrands = (config.blockedAmazonBrands as string[]) || [];
+  // === CHECK REQUIRED FIELDS ===
+  // Brand Tier, Condition, and Weight Class must ALL be set before scoring runs
+  if (!input.brandTier) {
+    missingRequiredFields.push("Brand Tier");
+  }
+  if (!input.condition) {
+    missingRequiredFields.push("Condition");
+  }
+  if (!input.weightClass) {
+    missingRequiredFields.push("Weight Class");
+  }
   
-  const isHighValueBrand = input.brand && 
-    highValueBrands.some(b => b.toLowerCase() === input.brand!.toLowerCase());
-  
-  const isBlockedAmazonBrand = input.brand &&
-    blockedAmazonBrands.some(b => b.toLowerCase() === input.brand!.toLowerCase());
+  // If required fields are missing, return early with no routing
+  if (missingRequiredFields.length > 0) {
+    return {
+      primary: null,
+      secondary: null,
+      scores,
+      disqualifications,
+      needsReview: true,
+      missingRequiredFields
+    };
+  }
 
   // === HARD RULES (Disqualifications) ===
   
-  // Heavy items cannot go to Whatnot
-  if (input.weightOunces && input.weightOunces >= config.heavyWeightOunces) {
-    disqualifications.whatnot.push(`Too heavy (${(input.weightOunces / 16).toFixed(1)} lbs >= ${(config.heavyWeightOunces / 16).toFixed(1)} lbs limit)`);
+  // Heavy items (weight class = heavy) cannot go to Whatnot
+  if (input.weightClass === "heavy") {
+    disqualifications.whatnot.push("Heavy items cannot be shipped via Whatnot");
   }
   
   // Damaged/parts items cannot go to Amazon
@@ -64,26 +82,26 @@ export function calculateRouting(
     disqualifications.amazon.push("Parts/damaged condition not allowed on Amazon");
   }
   
-  // Blocked brands cannot go to Amazon
-  if (isBlockedAmazonBrand) {
-    disqualifications.amazon.push(`Brand "${input.brand}" is blocked on Amazon`);
+  // Tier C (private label/white label) items BLOCKED on Amazon
+  if (input.brandTier === "C") {
+    disqualifications.amazon.push("Tier C (private label) items not allowed on Amazon");
   }
 
-  // === HIGH-VALUE BRAND RATIO CHECK (10:1) ===
-  // For every 10 high-value brand items sent to other platforms, 1 can go to Whatnot
-  if (isHighValueBrand) {
+  // === TIER A BRAND RATIO CHECK (10:1) ===
+  // For every 10 Tier A items sent to other platforms, 1 can go to Whatnot
+  if (input.brandTier === "A") {
     const whatnotCount = brandStats?.whatnotCount ?? 0;
     const otherCount = brandStats?.otherPlatformCount ?? 0;
     const allowedWhatnotCount = Math.floor(otherCount / config.whatnotBrandRatio);
     
     if (whatnotCount >= allowedWhatnotCount) {
       disqualifications.whatnot.push(
-        `High-value brand quota: need ${config.whatnotBrandRatio} items on other platforms per Whatnot listing (${otherCount} elsewhere, ${allowedWhatnotCount} Whatnot spots available, ${whatnotCount} used)`
+        `Premium brand quota: need ${config.whatnotBrandRatio} items on other platforms per Whatnot listing (${otherCount} elsewhere, ${allowedWhatnotCount} Whatnot spots available, ${whatnotCount} used)`
       );
     }
   }
 
-  // === SCORING ===
+  // === SCORING BASED ON BRAND TIER ===
   
   // --- WHATNOT SCORING ---
   // Whatnot favors variety and imperfect inventory
@@ -93,22 +111,40 @@ export function calculateRouting(
   if (input.condition === "parts_damaged") {
     scores.whatnot += 10; // Even parts can sell in live auctions
   }
-  // Penalize high-value brands (they underperform live)
-  if (isHighValueBrand) {
+  // Tier A (premium brands) are penalized on Whatnot - they underperform live
+  if (input.brandTier === "A") {
     scores.whatnot -= 25;
+  }
+  // Tier B and C do well on Whatnot
+  if (input.brandTier === "B") {
+    scores.whatnot += 5;
+  }
+  if (input.brandTier === "C") {
+    scores.whatnot += 15; // Private label does great on Whatnot
   }
   // Lower price items do better on Whatnot
   if (input.retailPrice && input.retailPrice < 3000) { // Under $30
     scores.whatnot += 10;
   }
+  // Light items preferred for Whatnot shipping
+  if (input.weightClass === "light") {
+    scores.whatnot += 10;
+  }
   
   // --- EBAY SCORING ---
-  // eBay favors searchable, branded, UPC-matched items
+  // eBay favors searchable, branded items
   if (input.upcMatched) {
     scores.ebay += 20; // UPC matching is huge for eBay search
   }
-  if (input.brand) {
-    scores.ebay += 15; // Branded items search well
+  // Tier A and B brands search well on eBay
+  if (input.brandTier === "A") {
+    scores.ebay += 20; // Premium brands excel on eBay
+  }
+  if (input.brandTier === "B") {
+    scores.ebay += 15; // Recognizable brands do well
+  }
+  if (input.brandTier === "C") {
+    scores.ebay += 5; // Private label still okay
   }
   // Higher value items do better on eBay
   if (input.retailPrice && input.retailPrice >= 2000) { // $20+
@@ -138,10 +174,14 @@ export function calculateRouting(
   if (input.stockQuantity >= 5) {
     scores.amazon += 10;
   }
-  // Branded items do well
-  if (input.brand && !isBlockedAmazonBrand) {
+  // Tier A brands do best on Amazon
+  if (input.brandTier === "A") {
+    scores.amazon += 20;
+  }
+  if (input.brandTier === "B") {
     scores.amazon += 10;
   }
+  // Tier C already disqualified above
   // Higher value items
   if (input.retailPrice && input.retailPrice >= 2000) {
     scores.amazon += 10;
@@ -168,13 +208,15 @@ export function calculateRouting(
     secondary,
     scores,
     disqualifications,
-    needsReview
+    needsReview,
+    missingRequiredFields: []
   };
 }
 
 export function getRoutingInputFromAuction(auction: Partial<Auction>, upcMatched: boolean): RoutingInput {
   return {
-    brand: auction.brand || null,
+    brandTier: (auction.brandTier as BrandTier) || null,
+    weightClass: (auction.weightClass as WeightClass) || null,
     category: auction.category || null,
     retailPrice: auction.retailPrice || null,
     condition: (auction.condition as ItemCondition) || null,
