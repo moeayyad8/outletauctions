@@ -189,6 +189,8 @@ export default function Staff() {
         title: item.title,
         description: item.brand ? `Brand: ${item.brand}` : null,
         image: item.customImage || item.image,
+        brand: item.brand,
+        category: item.category,
         retailPrice: item.highestPrice ? Math.round(item.highestPrice * 100) : null,
         startingBid: 1,
         status: 'draft',

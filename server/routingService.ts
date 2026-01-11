@@ -70,11 +70,15 @@ export function calculateRouting(
   }
 
   // === HIGH-VALUE BRAND RATIO CHECK (10:1) ===
-  if (isHighValueBrand && brandStats) {
-    const allowedWhatnotCount = Math.floor(brandStats.otherPlatformCount / config.whatnotBrandRatio);
-    if (brandStats.whatnotCount >= allowedWhatnotCount) {
+  // For every 10 high-value brand items sent to other platforms, 1 can go to Whatnot
+  if (isHighValueBrand) {
+    const whatnotCount = brandStats?.whatnotCount ?? 0;
+    const otherCount = brandStats?.otherPlatformCount ?? 0;
+    const allowedWhatnotCount = Math.floor(otherCount / config.whatnotBrandRatio);
+    
+    if (whatnotCount >= allowedWhatnotCount) {
       disqualifications.whatnot.push(
-        `High-value brand quota exceeded (${brandStats.whatnotCount}/${allowedWhatnotCount} allowed based on ${brandStats.otherPlatformCount} sent elsewhere)`
+        `High-value brand quota: need ${config.whatnotBrandRatio} items on other platforms per Whatnot listing (${otherCount} elsewhere, ${allowedWhatnotCount} Whatnot spots available, ${whatnotCount} used)`
       );
     }
   }
