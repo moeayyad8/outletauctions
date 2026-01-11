@@ -200,22 +200,29 @@ export default function Staff() {
       const res = await apiRequest('POST', '/api/scan', { code: codeToScan });
       const scanData: ScanResult = await res.json();
       
-      // Fetch routing preview based on scan data
-      const routingRes = await apiRequest('POST', '/api/staff/routing-preview', {
-        brand: scanData.brand,
-        category: scanData.category,
-        retailPrice: scanData.highestPrice,
-        upcMatched: scanData.lookupStatus === 'SUCCESS'
-      });
-      const routingData: RoutingResult = await routingRes.json();
+      // Fetch routing preview based on scan data (convert price to cents for backend)
+      let routingData: RoutingResult | null = null;
+      try {
+        const routingRes = await apiRequest('POST', '/api/staff/routing-preview', {
+          brand: scanData.brand,
+          category: scanData.category,
+          retailPrice: scanData.highestPrice ? Math.round(scanData.highestPrice * 100) : null,
+          upcMatched: scanData.lookupStatus === 'SUCCESS'
+        });
+        if (routingRes.ok) {
+          routingData = await routingRes.json();
+        }
+      } catch (e) {
+        console.error('Routing preview failed, using default:', e);
+      }
       
       return { scanData, routingData };
     },
     onSuccess: ({ scanData, routingData }) => {
-      // Map routing primary to destination type
+      // Map routing primary to destination type (default to auction if no routing)
       let destination: DestinationType = 'auction';
-      if (routingData.primary === 'ebay') destination = 'ebay';
-      else if (routingData.primary === 'amazon') destination = 'amazon';
+      if (routingData?.primary === 'ebay') destination = 'ebay';
+      else if (routingData?.primary === 'amazon') destination = 'amazon';
       
       const newItem: BatchItem = {
         ...scanData,
@@ -250,20 +257,27 @@ export default function Staff() {
       const codeData = await res.json();
       
       // Fetch routing preview for a generic item
-      const routingRes = await apiRequest('POST', '/api/staff/routing-preview', {
-        brand: null,
-        category: null,
-        retailPrice: null,
-        upcMatched: false
-      });
-      const routingData: RoutingResult = await routingRes.json();
+      let routingData: RoutingResult | null = null;
+      try {
+        const routingRes = await apiRequest('POST', '/api/staff/routing-preview', {
+          brand: null,
+          category: null,
+          retailPrice: null,
+          upcMatched: false
+        });
+        if (routingRes.ok) {
+          routingData = await routingRes.json();
+        }
+      } catch (e) {
+        console.error('Routing preview failed, using default:', e);
+      }
       
       return { codeData, routingData };
     },
     onSuccess: ({ codeData, routingData }) => {
       let destination: DestinationType = 'auction';
-      if (routingData.primary === 'ebay') destination = 'ebay';
-      else if (routingData.primary === 'amazon') destination = 'amazon';
+      if (routingData?.primary === 'ebay') destination = 'ebay';
+      else if (routingData?.primary === 'amazon') destination = 'amazon';
       
       const newItem: BatchItem = {
         code: codeData.code,
@@ -702,7 +716,7 @@ export default function Staff() {
                           </div>
                           
                           {item.routing && (
-                            <div className="mt-2 pt-2 border-t">
+                            <div className="mt-2 pt-2 border-t" data-testid={`routing-preview-${item.id}`}>
                               <div className="flex items-center justify-between gap-2">
                                 <span className="text-[10px] text-muted-foreground">Routing:</span>
                                 <CompactRoutingScores 
@@ -712,7 +726,7 @@ export default function Staff() {
                                 />
                               </div>
                               {item.routing.needsReview && (
-                                <div className="flex items-center gap-1 mt-1 text-[10px] text-amber-600">
+                                <div className="flex items-center gap-1 mt-1 text-[10px] text-amber-600" data-testid={`routing-review-warning-${item.id}`}>
                                   <AlertTriangle className="w-3 h-3" />
                                   <span>Needs review - close scores</span>
                                 </div>
