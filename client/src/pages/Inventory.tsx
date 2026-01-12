@@ -121,18 +121,29 @@ export default function Inventory() {
       return;
     }
     
-    const csv = generateEbayCSV(unexportedEbayItems);
-    const timestamp = new Date().toISOString().slice(0, 10);
-    const timeStr = new Date().toTimeString().slice(0, 5).replace(':', '-');
-    downloadCSV(csv, `ebay-draft-listings-${timestamp}-${timeStr}.csv`);
-    
     const ids = unexportedEbayItems.map(item => item.id);
-    await markExportedMutation.mutateAsync(ids);
+    const itemCount = unexportedEbayItems.length;
+    const itemsToExport = [...unexportedEbayItems];
     
-    toast({ 
-      title: `Exported ${unexportedEbayItems.length} items`, 
-      description: 'Items marked as exported to prevent duplicates' 
-    });
+    try {
+      await markExportedMutation.mutateAsync(ids);
+      
+      const csv = generateEbayCSV(itemsToExport);
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const timeStr = new Date().toTimeString().slice(0, 5).replace(':', '-');
+      downloadCSV(csv, `ebay-draft-listings-${timestamp}-${timeStr}.csv`);
+      
+      toast({ 
+        title: `Exported ${itemCount} items`, 
+        description: 'Items marked as exported to prevent duplicates' 
+      });
+    } catch (error) {
+      toast({ 
+        title: 'Export failed', 
+        description: 'Could not mark items as exported. Please try again.',
+        variant: 'destructive' 
+      });
+    }
   };
 
   if (isLoading) {
