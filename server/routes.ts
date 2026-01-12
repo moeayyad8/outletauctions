@@ -429,8 +429,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "ids array is required" });
       }
       
-      await storage.markAuctionsExported(ids);
-      res.json({ success: true, count: ids.length });
+      const validIds = ids.filter(id => typeof id === 'number' && Number.isInteger(id) && id > 0);
+      if (validIds.length === 0) {
+        return res.status(400).json({ message: "No valid numeric IDs provided" });
+      }
+      
+      if (validIds.length !== ids.length) {
+        console.warn(`Filtered out ${ids.length - validIds.length} invalid IDs from export request`);
+      }
+      
+      await storage.markAuctionsExported(validIds);
+      res.json({ success: true, count: validIds.length });
     } catch (error) {
       console.error("Error marking auctions as exported:", error);
       res.status(500).json({ message: "Failed to mark auctions as exported" });
