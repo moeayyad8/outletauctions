@@ -706,25 +706,44 @@ export default function Staff() {
                               <span className="text-xs text-muted-foreground">No price</span>
                             )}
                             
-                            <Select
-                              value={item.shelfId?.toString() || ''}
-                              onValueChange={(val) => setItemShelf(item.id, val ? parseInt(val) : null)}
-                            >
-                              <SelectTrigger 
-                                className={`w-[120px] h-7 text-xs ${!item.shelfId ? 'border-orange-400 text-orange-600' : ''}`}
-                                data-testid={`select-shelf-${item.id}`}
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-muted-foreground">Qty:</span>
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  className="w-14 h-7 text-xs text-center px-1"
+                                  value={item.stockQuantity}
+                                  onChange={(e) => {
+                                    const qty = parseInt(e.target.value) || 1;
+                                    setBatch(prev => prev.map(b => 
+                                      b.id === item.id ? { ...b, stockQuantity: Math.max(1, qty) } : b
+                                    ));
+                                  }}
+                                  data-testid={`input-qty-${item.id}`}
+                                />
+                              </div>
+                              
+                              <Select
+                                value={item.shelfId?.toString() || ''}
+                                onValueChange={(val) => setItemShelf(item.id, val ? parseInt(val) : null)}
                               >
-                                <MapPin className="w-3 h-3 mr-1" />
-                                <SelectValue placeholder="Location" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {shelves.map(shelf => (
-                                  <SelectItem key={shelf.id} value={shelf.id.toString()}>
-                                    {shelf.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                                <SelectTrigger 
+                                  className={`w-[110px] h-7 text-xs ${!item.shelfId ? 'border-orange-400 text-orange-600' : ''}`}
+                                  data-testid={`select-shelf-${item.id}`}
+                                >
+                                  <MapPin className="w-3 h-3 mr-1" />
+                                  <SelectValue placeholder="Location" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {shelves.map(shelf => (
+                                    <SelectItem key={shelf.id} value={shelf.id.toString()}>
+                                      {shelf.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </div>
                           
                           <div className="grid grid-cols-3 gap-1 mt-2 pt-2 border-t">
