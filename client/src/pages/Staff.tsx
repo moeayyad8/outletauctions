@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { Link } from 'wouter';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
@@ -951,9 +952,17 @@ export default function Staff() {
           <header className="pt-2">
             <div className="flex items-center justify-between mb-1">
               <h1 className="text-2xl font-bold tracking-tight">Inventory</h1>
-              <Badge variant="secondary" className="font-mono text-xs">
-                {auctions.length} items
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Link href="/inventory">
+                  <Button variant="outline" size="sm" data-testid="button-inventory-page">
+                    <ExternalLink className="w-4 h-4 mr-1" />
+                    Full View
+                  </Button>
+                </Link>
+                <Badge variant="secondary" className="font-mono text-xs">
+                  {auctions.length} items
+                </Badge>
+              </div>
             </div>
             <p className="text-sm text-muted-foreground">All items in your inventory</p>
           </header>
