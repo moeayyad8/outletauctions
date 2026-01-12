@@ -1,11 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Download, Package, ExternalLink, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Download, Package, Image as ImageIcon, Check, Clock } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Auction } from "@shared/schema";
 
 const EBAY_CONDITION_MAP: Record<string, string> = {
@@ -77,6 +79,7 @@ function downloadCSV(content: string, filename: string) {
 
 export default function Inventory() {
   const [activeTab, setActiveTab] = useState("all");
+  const { toast } = useToast();
   
   const { data: auctions = [], isLoading } = useQuery<Auction[]>({
     queryKey: ['/api/staff/auctions'],
@@ -87,21 +90,49 @@ export default function Inventory() {
     [auctions]
   );
   
+  const unexportedEbayItems = useMemo(() => 
+    ebayItems.filter(a => !a.lastExportedAt), 
+    [ebayItems]
+  );
+  
+  const exportedEbayItems = useMemo(() => 
+    ebayItems.filter(a => a.lastExportedAt), 
+    [ebayItems]
+  );
+  
   const amazonItems = useMemo(() => 
     auctions.filter(a => a.destination === 'amazon'), 
     [auctions]
   );
-  
-  const auctionItems = useMemo(() => 
-    auctions.filter(a => a.destination === 'auction'), 
-    [auctions]
-  );
 
-  const handleExportEbayCSV = () => {
-    if (ebayItems.length === 0) return;
-    const csv = generateEbayCSV(ebayItems);
+  const markExportedMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const response = await apiRequest('POST', '/api/staff/auctions/mark-exported', { ids });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/staff/auctions'] });
+    },
+  });
+
+  const handleExportEbayCSV = async () => {
+    if (unexportedEbayItems.length === 0) {
+      toast({ title: 'No new items to export', variant: 'destructive' });
+      return;
+    }
+    
+    const csv = generateEbayCSV(unexportedEbayItems);
     const timestamp = new Date().toISOString().slice(0, 10);
-    downloadCSV(csv, `ebay-draft-listings-${timestamp}.csv`);
+    const timeStr = new Date().toTimeString().slice(0, 5).replace(':', '-');
+    downloadCSV(csv, `ebay-draft-listings-${timestamp}-${timeStr}.csv`);
+    
+    const ids = unexportedEbayItems.map(item => item.id);
+    await markExportedMutation.mutateAsync(ids);
+    
+    toast({ 
+      title: `Exported ${unexportedEbayItems.length} items`, 
+      description: 'Items marked as exported to prevent duplicates' 
+    });
   };
 
   if (isLoading) {
@@ -146,35 +177,60 @@ export default function Inventory() {
             <InventoryList items={auctions} showDestination />
           </TabsContent>
 
-          <TabsContent value="ebay" className="mt-4 space-y-3">
+          <TabsContent value="ebay" className="mt-4 space-y-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
-                <CardTitle className="text-base">eBay Listings</CardTitle>
+                <div>
+                  <CardTitle className="text-base">Ready to Export</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {unexportedEbayItems.length} new items
+                  </p>
+                </div>
                 <Button
                   size="sm"
-                  variant="outline"
                   onClick={handleExportEbayCSV}
-                  disabled={ebayItems.length === 0}
+                  disabled={unexportedEbayItems.length === 0 || markExportedMutation.isPending}
                   data-testid="button-export-ebay-csv"
                 >
                   <Download className="w-4 h-4 mr-2" />
-                  Export CSV
+                  {markExportedMutation.isPending ? 'Exporting...' : `Export ${unexportedEbayItems.length} Items`}
                 </Button>
               </CardHeader>
               <CardContent className="pt-2">
-                {ebayItems.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">
-                    No items routed to eBay yet
+                {unexportedEbayItems.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    No new items to export
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {ebayItems.map(item => (
+                    {unexportedEbayItems.map(item => (
                       <EbayItemRow key={item.id} item={item} />
                     ))}
                   </div>
                 )}
               </CardContent>
             </Card>
+
+            {exportedEbayItems.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-green-600" />
+                    <CardTitle className="text-base">Already Exported</CardTitle>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {exportedEbayItems.length} items previously exported
+                  </p>
+                </CardHeader>
+                <CardContent className="pt-2">
+                  <div className="space-y-2 opacity-60">
+                    {exportedEbayItems.map(item => (
+                      <EbayItemRow key={item.id} item={item} showExported />
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="amazon" className="mt-4 space-y-3">
@@ -248,7 +304,7 @@ function InventoryList({ items, showDestination = false }: { items: Auction[]; s
   );
 }
 
-function EbayItemRow({ item }: { item: Auction }) {
+function EbayItemRow({ item, showExported = false }: { item: Auction; showExported?: boolean }) {
   const conditionId = item.condition ? (EBAY_CONDITION_MAP[item.condition] || "1000") : "1000";
   const conditionLabel = EBAY_CONDITION_LABELS[conditionId] || "NEW";
   
@@ -282,9 +338,12 @@ function EbayItemRow({ item }: { item: Auction }) {
           )}
         </div>
       </div>
-      <Badge variant="outline" className="text-xs flex-shrink-0">
-        Cat: 47140
-      </Badge>
+      {showExported && item.lastExportedAt && (
+        <div className="flex items-center gap-1 text-xs text-green-600">
+          <Clock className="w-3 h-3" />
+          <span>{new Date(item.lastExportedAt).toLocaleDateString()}</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -420,6 +420,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Mark auctions as exported (for CSV export tracking)
+  app.post('/api/staff/auctions/mark-exported', async (req, res) => {
+    try {
+      const { ids } = req.body;
+      
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "ids array is required" });
+      }
+      
+      await storage.markAuctionsExported(ids);
+      res.json({ success: true, count: ids.length });
+    } catch (error) {
+      console.error("Error marking auctions as exported:", error);
+      res.status(500).json({ message: "Failed to mark auctions as exported" });
+    }
+  });
+
   // Public endpoint - get active auctions for homepage
   app.get('/api/auctions', async (req, res) => {
     try {

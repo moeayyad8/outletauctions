@@ -107,6 +107,7 @@ export const auctions = pgTable("auctions", {
   routingScores: jsonb("routing_scores"),
   routingDisqualifications: jsonb("routing_disqualifications"),
   needsReview: integer("needs_review").notNull().default(0),
+  lastExportedAt: timestamp("last_exported_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
