@@ -151,16 +151,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Shelf location is required" });
       }
       
-      // Require brandTier, condition, and weightClass for proper routing
-      if (!auctionData.brandTier) {
-        return res.status(400).json({ message: "Brand Tier is required (A, B, or C)" });
-      }
-      if (!auctionData.condition) {
-        return res.status(400).json({ message: "Condition is required" });
-      }
-      if (!auctionData.weightClass) {
-        return res.status(400).json({ message: "Weight Class is required" });
-      }
+      // Note: brandTier, condition, and weightClass are optional for now
+      // Items without these fields will default to eBay destination
       
       const auction = await storage.createAuction(auctionData);
       
@@ -443,6 +435,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error marking auctions as exported:", error);
       res.status(500).json({ message: "Failed to mark auctions as exported" });
+    }
+  });
+
+  // Mark auctions as listed on eBay (after CSV uploaded to eBay)
+  app.post('/api/staff/auctions/mark-listed', async (req, res) => {
+    try {
+      const { ids } = req.body;
+      
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "ids array is required" });
+      }
+      
+      const validIds = ids.filter(id => typeof id === 'number' && Number.isInteger(id) && id > 0);
+      if (validIds.length === 0) {
+        return res.status(400).json({ message: "No valid numeric IDs provided" });
+      }
+      
+      await storage.markAuctionsListed(validIds);
+      res.json({ success: true, count: validIds.length });
+    } catch (error) {
+      console.error("Error marking auctions as listed:", error);
+      res.status(500).json({ message: "Failed to mark auctions as listed" });
     }
   });
 

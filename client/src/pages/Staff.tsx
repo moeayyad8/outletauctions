@@ -491,21 +491,8 @@ export default function Staff() {
       return;
     }
     
-    // Check for required routing fields
-    const itemsMissingFields = batch.filter(item => !item.brandTier || !item.condition || !item.weightClass);
-    if (itemsMissingFields.length > 0) {
-      const missingFields: string[] = [];
-      if (itemsMissingFields.some(i => !i.brandTier)) missingFields.push('Brand Tier');
-      if (itemsMissingFields.some(i => !i.condition)) missingFields.push('Condition');
-      if (itemsMissingFields.some(i => !i.weightClass)) missingFields.push('Weight Class');
-      
-      toast({ 
-        title: 'Complete all required fields', 
-        description: `${itemsMissingFields.length} item(s) missing: ${missingFields.join(', ')}`,
-        variant: 'destructive' 
-      });
-      return;
-    }
+    // Note: tier/condition/weight fields are optional for now
+    // Items without these fields will default to eBay destination
     
     setIsSending(true);
     let successCount = 0;
@@ -813,8 +800,7 @@ export default function Staff() {
                           {!item.routing && (
                             <div className="mt-2 pt-2 border-t" data-testid={`routing-pending-${item.id}`}>
                               <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                                <AlertTriangle className="w-3 h-3" />
-                                <span>Set Tier, Condition, Weight to see routing</span>
+                                <span>Default: eBay (set fields for smart routing)</span>
                               </div>
                             </div>
                           )}

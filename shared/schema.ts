@@ -108,6 +108,7 @@ export const auctions = pgTable("auctions", {
   routingDisqualifications: jsonb("routing_disqualifications"),
   needsReview: integer("needs_review").notNull().default(0),
   lastExportedAt: timestamp("last_exported_at"),
+  ebayStatus: varchar("ebay_status", { length: 20 }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

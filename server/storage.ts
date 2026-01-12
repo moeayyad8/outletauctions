@@ -45,6 +45,7 @@ export interface IStorage {
     needsReview?: number;
   }): Promise<Auction | undefined>;
   markAuctionsExported(ids: number[]): Promise<void>;
+  markAuctionsListed(ids: number[]): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -334,7 +335,14 @@ export class DatabaseStorage implements IStorage {
   async markAuctionsExported(ids: number[]): Promise<void> {
     if (ids.length === 0) return;
     await db.update(auctions)
-      .set({ lastExportedAt: new Date() })
+      .set({ lastExportedAt: new Date(), ebayStatus: 'exported' })
+      .where(inArray(auctions.id, ids));
+  }
+
+  async markAuctionsListed(ids: number[]): Promise<void> {
+    if (ids.length === 0) return;
+    await db.update(auctions)
+      .set({ ebayStatus: 'listed' })
       .where(inArray(auctions.id, ids));
   }
 }

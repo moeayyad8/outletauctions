@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Download, Package, Image as ImageIcon, Check, Clock } from "lucide-react";
+import { ArrowLeft, Download, Package, Image as ImageIcon, Check, Clock, CheckCircle2, Upload } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Auction } from "@shared/schema";
@@ -90,13 +90,18 @@ export default function Inventory() {
     [auctions]
   );
   
-  const unexportedEbayItems = useMemo(() => 
-    ebayItems.filter(a => !a.lastExportedAt), 
+  const readyToExportItems = useMemo(() => 
+    ebayItems.filter(a => !a.ebayStatus || a.ebayStatus === null), 
     [ebayItems]
   );
   
-  const exportedEbayItems = useMemo(() => 
-    ebayItems.filter(a => a.lastExportedAt), 
+  const exportedItems = useMemo(() => 
+    ebayItems.filter(a => a.ebayStatus === 'exported'), 
+    [ebayItems]
+  );
+  
+  const listedItems = useMemo(() => 
+    ebayItems.filter(a => a.ebayStatus === 'listed'), 
     [ebayItems]
   );
   
@@ -115,15 +120,25 @@ export default function Inventory() {
     },
   });
 
+  const markListedMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const response = await apiRequest('POST', '/api/staff/auctions/mark-listed', { ids });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/staff/auctions'] });
+    },
+  });
+
   const handleExportEbayCSV = async () => {
-    if (unexportedEbayItems.length === 0) {
+    if (readyToExportItems.length === 0) {
       toast({ title: 'No new items to export', variant: 'destructive' });
       return;
     }
     
-    const ids = unexportedEbayItems.map(item => item.id);
-    const itemCount = unexportedEbayItems.length;
-    const itemsToExport = [...unexportedEbayItems];
+    const ids = readyToExportItems.map(item => item.id);
+    const itemCount = readyToExportItems.length;
+    const itemsToExport = [...readyToExportItems];
     
     try {
       await markExportedMutation.mutateAsync(ids);
@@ -135,12 +150,31 @@ export default function Inventory() {
       
       toast({ 
         title: `Exported ${itemCount} items`, 
-        description: 'Items marked as exported to prevent duplicates' 
+        description: 'Upload the CSV to eBay, then click "Mark as Listed"' 
       });
     } catch (error) {
       toast({ 
         title: 'Export failed', 
         description: 'Could not mark items as exported. Please try again.',
+        variant: 'destructive' 
+      });
+    }
+  };
+
+  const handleMarkAsListed = async () => {
+    if (exportedItems.length === 0) return;
+    
+    const ids = exportedItems.map(item => item.id);
+    
+    try {
+      await markListedMutation.mutateAsync(ids);
+      toast({ 
+        title: `Marked ${ids.length} items as listed`, 
+        description: 'Items moved to Listed section' 
+      });
+    } catch (error) {
+      toast({ 
+        title: 'Failed to mark as listed', 
         variant: 'destructive' 
       });
     }
@@ -194,27 +228,27 @@ export default function Inventory() {
                 <div>
                   <CardTitle className="text-base">Ready to Export</CardTitle>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {unexportedEbayItems.length} new items
+                    {readyToExportItems.length} new items
                   </p>
                 </div>
                 <Button
                   size="sm"
                   onClick={handleExportEbayCSV}
-                  disabled={unexportedEbayItems.length === 0 || markExportedMutation.isPending}
+                  disabled={readyToExportItems.length === 0 || markExportedMutation.isPending}
                   data-testid="button-export-ebay-csv"
                 >
                   <Download className="w-4 h-4 mr-2" />
-                  {markExportedMutation.isPending ? 'Exporting...' : `Export ${unexportedEbayItems.length} Items`}
+                  {markExportedMutation.isPending ? 'Exporting...' : `Export ${readyToExportItems.length} Items`}
                 </Button>
               </CardHeader>
               <CardContent className="pt-2">
-                {unexportedEbayItems.length === 0 ? (
+                {readyToExportItems.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-6">
                     No new items to export
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {unexportedEbayItems.map(item => (
+                    {readyToExportItems.map(item => (
                       <EbayItemRow key={item.id} item={item} />
                     ))}
                   </div>
@@ -222,21 +256,54 @@ export default function Inventory() {
               </CardContent>
             </Card>
 
-            {exportedEbayItems.length > 0 && (
+            {exportedItems.length > 0 && (
+              <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-900/20">
+                <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Upload className="w-4 h-4 text-amber-600" />
+                    <div>
+                      <CardTitle className="text-base">Pending Upload to eBay</CardTitle>
+                      <p className="text-xs text-muted-foreground">
+                        {exportedItems.length} items exported - upload CSV to eBay then mark as listed
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleMarkAsListed}
+                    disabled={markListedMutation.isPending}
+                    data-testid="button-mark-listed"
+                  >
+                    <Check className="w-4 h-4 mr-2" />
+                    {markListedMutation.isPending ? 'Marking...' : 'Mark as Listed'}
+                  </Button>
+                </CardHeader>
+                <CardContent className="pt-2">
+                  <div className="space-y-2">
+                    {exportedItems.map(item => (
+                      <EbayItemRow key={item.id} item={item} status="exported" />
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {listedItems.length > 0 && (
               <Card>
                 <CardHeader className="pb-2">
                   <div className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-green-600" />
-                    <CardTitle className="text-base">Already Exported</CardTitle>
+                    <CheckCircle2 className="w-4 h-4 text-green-600" />
+                    <CardTitle className="text-base">Listed on eBay</CardTitle>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {exportedEbayItems.length} items previously exported
+                    {listedItems.length} items already on eBay
                   </p>
                 </CardHeader>
                 <CardContent className="pt-2">
                   <div className="space-y-2 opacity-60">
-                    {exportedEbayItems.map(item => (
-                      <EbayItemRow key={item.id} item={item} showExported />
+                    {listedItems.map(item => (
+                      <EbayItemRow key={item.id} item={item} status="listed" />
                     ))}
                   </div>
                 </CardContent>
@@ -315,7 +382,7 @@ function InventoryList({ items, showDestination = false }: { items: Auction[]; s
   );
 }
 
-function EbayItemRow({ item, showExported = false }: { item: Auction; showExported?: boolean }) {
+function EbayItemRow({ item, status }: { item: Auction; status?: 'exported' | 'listed' }) {
   const conditionId = item.condition ? (EBAY_CONDITION_MAP[item.condition] || "1000") : "1000";
   const conditionLabel = EBAY_CONDITION_LABELS[conditionId] || "NEW";
   
@@ -349,11 +416,15 @@ function EbayItemRow({ item, showExported = false }: { item: Auction; showExport
           )}
         </div>
       </div>
-      {showExported && item.lastExportedAt && (
-        <div className="flex items-center gap-1 text-xs text-green-600">
-          <Clock className="w-3 h-3" />
-          <span>{new Date(item.lastExportedAt).toLocaleDateString()}</span>
-        </div>
+      {status === 'listed' && (
+        <Badge variant="outline" className="text-xs text-green-600 border-green-600 flex-shrink-0">
+          Listed
+        </Badge>
+      )}
+      {status === 'exported' && (
+        <Badge variant="outline" className="text-xs text-amber-600 border-amber-600 flex-shrink-0">
+          Exported
+        </Badge>
       )}
     </div>
   );
