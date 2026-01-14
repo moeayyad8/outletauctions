@@ -683,7 +683,21 @@ export default function Staff() {
                                   </Badge>
                                 )}
                               </div>
-                              <p className="font-medium text-sm leading-tight line-clamp-2">{item.title}</p>
+                              {item.lookupStatus === "SUCCESS" ? (
+                                <p className="font-medium text-sm leading-tight line-clamp-2">{item.title}</p>
+                              ) : (
+                                <Input
+                                  className="h-7 text-sm font-medium px-2"
+                                  value={item.title}
+                                  placeholder="Enter product name"
+                                  onChange={(e) => {
+                                    setBatch(prev => prev.map(b => 
+                                      b.id === item.id ? { ...b, title: e.target.value } : b
+                                    ));
+                                  }}
+                                  data-testid={`input-title-${item.id}`}
+                                />
+                              )}
                               <p className="text-[11px] text-muted-foreground font-mono mt-0.5">{item.code}</p>
                             </div>
                             <Button
