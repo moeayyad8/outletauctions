@@ -9,7 +9,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useUpload } from '@/hooks/use-upload';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel, Store, ExternalLink, Grid3X3, ArrowRightLeft, LogIn, LogOut, AlertTriangle, CheckCircle2, Scale, ChevronDown, ChevronUp, Flag, Search } from 'lucide-react';
+import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel, Store, ExternalLink, Grid3X3, ArrowRightLeft, LogIn, LogOut, AlertTriangle, CheckCircle2, Scale, ChevronDown, ChevronUp, Flag, Search, Settings2, RotateCcw } from 'lucide-react';
 import { SiAmazon, SiEbay } from 'react-icons/si';
 import JsBarcode from 'jsbarcode';
 import type { Auction, Tag as TagType, Shelf } from '@shared/schema';
@@ -624,6 +624,138 @@ export default function Staff() {
             </div>
             <p className="text-sm text-muted-foreground">Scan products to build your batch</p>
           </header>
+
+          {/* Scan Defaults Panel */}
+          <div className="bg-muted/50 rounded-xl p-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Settings2 className="w-4 h-4" />
+                Scan Defaults
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setScanDefaults(DEFAULT_SCAN_SETTINGS);
+                  saveScanDefaults(DEFAULT_SCAN_SETTINGS);
+                  toast({ title: 'Defaults reset' });
+                }}
+                className="h-7 text-xs text-muted-foreground"
+                data-testid="button-reset-defaults"
+              >
+                <RotateCcw className="w-3 h-3 mr-1" />
+                Reset
+              </Button>
+            </div>
+
+            {/* Destination Toggle */}
+            <div className="flex gap-1.5">
+              <Button
+                variant={scanDefaults.destination === 'auction' ? 'default' : 'outline'}
+                size="sm"
+                className="flex-1 h-9"
+                onClick={() => updateScanDefaults({ destination: 'auction' })}
+                data-testid="button-default-auction"
+              >
+                <Gavel className="w-4 h-4 mr-1.5" />
+                Auction
+              </Button>
+              <Button
+                variant={scanDefaults.destination === 'ebay' ? 'default' : 'outline'}
+                size="sm"
+                className="flex-1 h-9"
+                onClick={() => updateScanDefaults({ destination: 'ebay' })}
+                data-testid="button-default-ebay"
+              >
+                <SiEbay className="w-4 h-4 mr-1.5" />
+                eBay
+              </Button>
+              <Button
+                variant={scanDefaults.destination === 'amazon' ? 'default' : 'outline'}
+                size="sm"
+                className="flex-1 h-9"
+                onClick={() => updateScanDefaults({ destination: 'amazon' })}
+                data-testid="button-default-amazon"
+              >
+                <SiAmazon className="w-4 h-4 mr-1.5" />
+                Amazon
+              </Button>
+            </div>
+
+            {/* Shelf, Quantity, Condition, Weight */}
+            <div className="grid grid-cols-2 gap-2">
+              <Select
+                value={scanDefaults.shelfId?.toString() || 'none'}
+                onValueChange={(val) => updateScanDefaults({ shelfId: val === 'none' ? null : parseInt(val) })}
+              >
+                <SelectTrigger className="h-9" data-testid="select-default-shelf">
+                  <MapPin className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                  <SelectValue placeholder="Shelf" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No shelf</SelectItem>
+                  {shelves.map((shelf) => (
+                    <SelectItem key={shelf.id} value={shelf.id.toString()}>
+                      {shelf.code}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={scanDefaults.stockQuantity.toString()}
+                onValueChange={(val) => updateScanDefaults({ stockQuantity: parseInt(val) })}
+              >
+                <SelectTrigger className="h-9" data-testid="select-default-quantity">
+                  <SelectValue placeholder="Qty" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((qty) => (
+                    <SelectItem key={qty} value={qty.toString()}>
+                      Qty: {qty}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={scanDefaults.condition || 'none'}
+                onValueChange={(val) => updateScanDefaults({ condition: val === 'none' ? null : val as ItemCondition })}
+              >
+                <SelectTrigger className="h-9" data-testid="select-default-condition">
+                  <SelectValue placeholder="Condition" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No condition</SelectItem>
+                  <SelectItem value="new">New</SelectItem>
+                  <SelectItem value="like_new">Like New</SelectItem>
+                  <SelectItem value="good">Good</SelectItem>
+                  <SelectItem value="acceptable">Acceptable</SelectItem>
+                  <SelectItem value="parts_damaged">Parts/Damaged</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={scanDefaults.weightClass || 'none'}
+                onValueChange={(val) => updateScanDefaults({ weightClass: val === 'none' ? null : val as WeightClass })}
+              >
+                <SelectTrigger className="h-9" data-testid="select-default-weight">
+                  <Scale className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                  <SelectValue placeholder="Weight" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No weight</SelectItem>
+                  <SelectItem value="light">Light (&lt;1lb)</SelectItem>
+                  <SelectItem value="medium">Medium (1-5lb)</SelectItem>
+                  <SelectItem value="heavy">Heavy (&gt;5lb)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground text-center">
+              These settings apply automatically to every scan
+            </p>
+          </div>
 
           <div className="relative">
             <div className="flex gap-2">
