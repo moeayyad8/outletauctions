@@ -145,7 +145,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/staff/auctions', async (req, res) => {
     try {
+      console.log('[DEBUG] Creating auction - raw body destination:', req.body.destination);
       const auctionData = insertAuctionSchema.parse(req.body);
+      console.log('[DEBUG] Creating auction - parsed destination:', auctionData.destination);
       
       if (!auctionData.shelfId) {
         return res.status(400).json({ message: "Shelf location is required" });

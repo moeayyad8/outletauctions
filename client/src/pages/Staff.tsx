@@ -180,7 +180,13 @@ export default function Staff() {
   const [inventorySearch, setInventorySearch] = useState('');
   const [scanDefaults, setScanDefaults] = useState<ScanDefaults>(loadScanDefaults);
   const barcodeRef = useRef<SVGSVGElement>(null);
+  const scanDefaultsRef = useRef<ScanDefaults>(scanDefaults);
   const { toast } = useToast();
+  
+  // Keep ref in sync with state for use in mutation callbacks
+  useEffect(() => {
+    scanDefaultsRef.current = scanDefaults;
+  }, [scanDefaults]);
   
   // Update defaults and persist to localStorage
   const updateScanDefaults = (updates: Partial<ScanDefaults>) => {
@@ -261,20 +267,21 @@ export default function Staff() {
       return { scanData };
     },
     onSuccess: ({ scanData }) => {
-      // Apply scan defaults from sticky settings
+      // Apply scan defaults from sticky settings (use ref to get current values)
+      const defaults = scanDefaultsRef.current;
       const newItem: BatchItem = {
         ...scanData,
         customImage: null,
         selectedTags: [],
         id: `${scanData.code}-${Date.now()}`,
-        destination: scanDefaults.destination,
-        shelfId: scanDefaults.shelfId,
+        destination: defaults.destination,
+        shelfId: defaults.shelfId,
         routing: null, // Will be set when user fills required fields
-        brandTier: scanDefaults.brandTier,
-        condition: scanDefaults.condition,
-        weightClass: scanDefaults.weightClass,
+        brandTier: defaults.brandTier,
+        condition: defaults.condition,
+        weightClass: defaults.weightClass,
         weightOunces: null,
-        stockQuantity: scanDefaults.stockQuantity,
+        stockQuantity: defaults.stockQuantity,
       };
       setBatch(prev => [newItem, ...prev]);
       setCode('');
@@ -299,7 +306,8 @@ export default function Staff() {
       return { codeData };
     },
     onSuccess: ({ codeData }) => {
-      // Apply scan defaults from sticky settings
+      // Apply scan defaults from sticky settings (use ref to get current values)
+      const defaults = scanDefaultsRef.current;
       const newItem: BatchItem = {
         code: codeData.code,
         codeType: "UNKNOWN",
@@ -312,14 +320,14 @@ export default function Staff() {
         customImage: null,
         selectedTags: [],
         id: `${codeData.code}-${Date.now()}`,
-        destination: scanDefaults.destination,
-        shelfId: scanDefaults.shelfId,
+        destination: defaults.destination,
+        shelfId: defaults.shelfId,
         routing: null, // Will be set when user fills required fields
-        brandTier: scanDefaults.brandTier,
-        condition: scanDefaults.condition,
-        weightClass: scanDefaults.weightClass,
+        brandTier: defaults.brandTier,
+        condition: defaults.condition,
+        weightClass: defaults.weightClass,
         weightOunces: null,
-        stockQuantity: scanDefaults.stockQuantity,
+        stockQuantity: defaults.stockQuantity,
       };
       setBatch(prev => [newItem, ...prev]);
       toast({ title: `Generated: ${codeData.code}` });
