@@ -9,7 +9,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useUpload } from '@/hooks/use-upload';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel, Store, ExternalLink, Grid3X3, ArrowRightLeft, LogIn, LogOut, AlertTriangle, CheckCircle2, Scale, ChevronDown, ChevronUp, Flag } from 'lucide-react';
+import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel, Store, ExternalLink, Grid3X3, ArrowRightLeft, LogIn, LogOut, AlertTriangle, CheckCircle2, Scale, ChevronDown, ChevronUp, Flag, Search } from 'lucide-react';
 import { SiAmazon, SiEbay } from 'react-icons/si';
 import JsBarcode from 'jsbarcode';
 import type { Auction, Tag as TagType, Shelf } from '@shared/schema';
@@ -139,6 +139,7 @@ export default function Staff() {
   const [shelfScanCode, setShelfScanCode] = useState('');
   const [shelfScanMode, setShelfScanMode] = useState<'in' | 'out'>('in');
   const [expandedItem, setExpandedItem] = useState<number | null>(null);
+  const [inventorySearch, setInventorySearch] = useState('');
   const barcodeRef = useRef<SVGSVGElement>(null);
   const { toast } = useToast();
 
@@ -986,7 +987,40 @@ export default function Staff() {
             <p className="text-sm text-muted-foreground">All items in your inventory</p>
           </header>
 
-          {auctions.length === 0 ? (
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name, code, or shelf..."
+              value={inventorySearch}
+              onChange={(e) => setInventorySearch(e.target.value)}
+              className="pl-9"
+              data-testid="input-inventory-search"
+            />
+            {inventorySearch && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                onClick={() => setInventorySearch('')}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+
+          {(() => {
+            const searchLower = inventorySearch.toLowerCase().trim();
+            const filteredAuctions = searchLower 
+              ? auctions.filter(a => 
+                  a.title.toLowerCase().includes(searchLower) ||
+                  a.internalCode?.toLowerCase().includes(searchLower) ||
+                  a.upc?.toLowerCase().includes(searchLower) ||
+                  shelves.find(s => s.id === a.shelfId)?.name.toLowerCase().includes(searchLower) ||
+                  shelves.find(s => s.id === a.shelfId)?.code.toLowerCase().includes(searchLower)
+                )
+              : auctions;
+            
+            return filteredAuctions.length === 0 ? (
             <div className="text-center py-16 px-4">
               <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
                 <Archive className="w-8 h-8 text-muted-foreground" />
@@ -996,9 +1030,9 @@ export default function Staff() {
                 Scanned items will appear here after sending from batch
               </p>
             </div>
-          ) : (
+            ) : (
             <div className="space-y-2">
-              {auctions.map((auction) => {
+              {filteredAuctions.map((auction) => {
                 const dest = (auction.destination as DestinationType) || 'auction';
                 const isListed = auction.status === 'active' || auction.externalStatus === 'listed';
                 
@@ -1236,7 +1270,8 @@ export default function Staff() {
                 );
               })}
             </div>
-          )}
+            );
+          })()}
         </div>
       )}
 
