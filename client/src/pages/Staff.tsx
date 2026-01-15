@@ -61,6 +61,7 @@ type TabType = 'scanner' | 'inventory' | 'fulfillment' | 'shelves';
 interface ScanDefaults {
   destination: DestinationType;
   shelfId: number | null;
+  brandTier: BrandTier | null;
   condition: ItemCondition | null;
   weightClass: WeightClass | null;
   stockQuantity: number;
@@ -69,6 +70,7 @@ interface ScanDefaults {
 const DEFAULT_SCAN_SETTINGS: ScanDefaults = {
   destination: 'ebay',
   shelfId: null,
+  brandTier: null,
   condition: null,
   weightClass: null,
   stockQuantity: 1,
@@ -268,7 +270,7 @@ export default function Staff() {
         destination: scanDefaults.destination,
         shelfId: scanDefaults.shelfId,
         routing: null, // Will be set when user fills required fields
-        brandTier: null,
+        brandTier: scanDefaults.brandTier,
         condition: scanDefaults.condition,
         weightClass: scanDefaults.weightClass,
         weightOunces: null,
@@ -313,7 +315,7 @@ export default function Staff() {
         destination: scanDefaults.destination,
         shelfId: scanDefaults.shelfId,
         routing: null, // Will be set when user fills required fields
-        brandTier: null,
+        brandTier: scanDefaults.brandTier,
         condition: scanDefaults.condition,
         weightClass: scanDefaults.weightClass,
         weightOunces: null,
@@ -682,7 +684,7 @@ export default function Staff() {
               </Button>
             </div>
 
-            {/* Shelf, Quantity, Condition, Weight */}
+            {/* Shelf, Quantity, Brand, Condition, Weight */}
             <div className="grid grid-cols-2 gap-2">
               <Select
                 value={scanDefaults.shelfId?.toString() || 'none'}
@@ -715,6 +717,21 @@ export default function Staff() {
                       Qty: {qty}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={scanDefaults.brandTier || 'none'}
+                onValueChange={(val) => updateScanDefaults({ brandTier: val === 'none' ? null : val as BrandTier })}
+              >
+                <SelectTrigger className="h-9" data-testid="select-default-brand">
+                  <SelectValue placeholder="Brand Tier" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No brand tier</SelectItem>
+                  <SelectItem value="A">Tier A (Premium)</SelectItem>
+                  <SelectItem value="B">Tier B (Mid)</SelectItem>
+                  <SelectItem value="C">Tier C (Budget)</SelectItem>
                 </SelectContent>
               </Select>
 
