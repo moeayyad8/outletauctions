@@ -1617,15 +1617,20 @@ export default function Staff() {
               <div className="grid grid-cols-4 gap-2">
                 {shelves.map((shelf) => {
                   const itemsOnShelf = auctions.filter(a => a.shelfId === shelf.id);
+                  const hasItems = itemsOnShelf.length > 0;
                   return (
                     <button
                       key={shelf.id}
                       onClick={() => setSelectedShelf(shelf.id)}
-                      className="p-3 rounded-xl border bg-card hover-elevate text-center transition-all"
+                      className={`p-3 rounded-xl border-2 bg-card hover-elevate text-center transition-all ${
+                        hasItems 
+                          ? 'border-green-500 dark:border-green-400' 
+                          : 'border-border'
+                      }`}
                       data-testid={`button-shelf-${shelf.id}`}
                     >
                       <div className="font-mono font-bold text-lg">{shelf.code}</div>
-                      <div className="text-xs text-muted-foreground mt-1">
+                      <div className={`text-xs mt-1 ${hasItems ? 'text-green-600 dark:text-green-400 font-medium' : 'text-muted-foreground'}`}>
                         {itemsOnShelf.length} items
                       </div>
                     </button>
