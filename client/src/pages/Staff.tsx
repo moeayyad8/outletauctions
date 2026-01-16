@@ -846,29 +846,62 @@ export default function Staff() {
                                 alt={item.title}
                                 className="w-full h-full object-cover"
                               />
-                              <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center">
-                                <Camera className="w-5 h-5 text-white" />
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  onChange={(e) => handleImageUpload(e, item.id)}
-                                  disabled={isUploading}
-                                  className="hidden"
-                                />
-                              </label>
+                              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                                <label className="cursor-pointer p-1.5 rounded-full bg-white/20 hover:bg-white/30">
+                                  <Camera className="w-4 h-4 text-white" />
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    capture="environment"
+                                    onChange={(e) => handleImageUpload(e, item.id)}
+                                    disabled={isUploading}
+                                    className="hidden"
+                                    data-testid={`input-camera-${item.id}`}
+                                  />
+                                </label>
+                                <label className="cursor-pointer p-1.5 rounded-full bg-white/20 hover:bg-white/30">
+                                  <ImagePlus className="w-4 h-4 text-white" />
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => handleImageUpload(e, item.id)}
+                                    disabled={isUploading}
+                                    className="hidden"
+                                    data-testid={`input-gallery-${item.id}`}
+                                  />
+                                </label>
+                              </div>
                             </>
                           ) : (
-                            <label className="cursor-pointer w-full h-full flex flex-col items-center justify-center gap-1 hover:bg-muted/80 transition-colors">
-                              <ImagePlus className="w-6 h-6 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">Add photo</span>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => handleImageUpload(e, item.id)}
-                                disabled={isUploading}
-                                className="hidden"
-                              />
-                            </label>
+                            <div className="w-full h-full flex flex-col items-center justify-center gap-1">
+                              <div className="flex gap-2">
+                                <label className="cursor-pointer flex flex-col items-center gap-0.5 p-2 rounded hover:bg-muted/80 transition-colors">
+                                  <Camera className="w-5 h-5 text-muted-foreground" />
+                                  <span className="text-[10px] text-muted-foreground">Camera</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    capture="environment"
+                                    onChange={(e) => handleImageUpload(e, item.id)}
+                                    disabled={isUploading}
+                                    className="hidden"
+                                    data-testid={`input-camera-new-${item.id}`}
+                                  />
+                                </label>
+                                <label className="cursor-pointer flex flex-col items-center gap-0.5 p-2 rounded hover:bg-muted/80 transition-colors">
+                                  <ImagePlus className="w-5 h-5 text-muted-foreground" />
+                                  <span className="text-[10px] text-muted-foreground">Gallery</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => handleImageUpload(e, item.id)}
+                                    disabled={isUploading}
+                                    className="hidden"
+                                    data-testid={`input-gallery-new-${item.id}`}
+                                  />
+                                </label>
+                              </div>
+                            </div>
                           )}
                         </div>
                         
