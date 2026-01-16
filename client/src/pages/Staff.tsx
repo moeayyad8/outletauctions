@@ -179,7 +179,12 @@ export default function Staff() {
   const [expandedItem, setExpandedItem] = useState<number | null>(null);
   const [inventorySearch, setInventorySearch] = useState('');
   const [scanDefaults, setScanDefaults] = useState<ScanDefaults>(loadScanDefaults);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraItemId, setCameraItemId] = useState<string | null>(null);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const barcodeRef = useRef<SVGSVGElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const scanDefaultsRef = useRef<ScanDefaults>(scanDefaults);
   const { toast } = useToast();
   
@@ -196,6 +201,64 @@ export default function Staff() {
       return updated;
     });
   };
+
+  // Camera functions
+  const openCamera = async (itemId: string) => {
+    setCameraItemId(itemId);
+    setCameraOpen(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      });
+      setCameraStream(stream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error('Camera access error:', err);
+      toast({ title: 'Could not access camera', variant: 'destructive' });
+      setCameraOpen(false);
+    }
+  };
+
+  const closeCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    setCameraOpen(false);
+    setCameraItemId(null);
+  };
+
+  const capturePhoto = async () => {
+    if (!videoRef.current || !canvasRef.current || !cameraItemId) return;
+    
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    ctx.drawImage(video, 0, 0);
+    
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const file = new File([blob], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      setEditingItem(cameraItemId);
+      closeCamera();
+      await uploadFile(file);
+    }, 'image/jpeg', 0.9);
+  };
+
+  // Cleanup camera on unmount
+  useEffect(() => {
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [cameraStream]);
 
   const { data: allTags = [] } = useQuery<TagType[]>({
     queryKey: ['/api/tags'],
@@ -846,33 +909,27 @@ export default function Staff() {
                                 alt={item.title}
                                 className="w-full h-full object-cover"
                               />
-                              <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center">
+                              <button
+                                type="button"
+                                onClick={() => openCamera(item.id)}
+                                disabled={isUploading}
+                                className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center"
+                                data-testid={`button-camera-${item.id}`}
+                              >
                                 <Camera className="w-6 h-6 text-white" />
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  capture="environment"
-                                  onChange={(e) => handleImageUpload(e, item.id)}
-                                  disabled={isUploading}
-                                  className="hidden"
-                                  data-testid={`input-camera-${item.id}`}
-                                />
-                              </label>
+                              </button>
                             </>
                           ) : (
-                            <label className="cursor-pointer w-full h-full flex flex-col items-center justify-center gap-1 hover:bg-muted/80 transition-colors">
+                            <button
+                              type="button"
+                              onClick={() => openCamera(item.id)}
+                              disabled={isUploading}
+                              className="cursor-pointer w-full h-full flex flex-col items-center justify-center gap-1 hover:bg-muted/80 transition-colors"
+                              data-testid={`button-camera-${item.id}`}
+                            >
                               <Camera className="w-6 h-6 text-muted-foreground" />
                               <span className="text-xs text-muted-foreground">Take Photo</span>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                capture="environment"
-                                onChange={(e) => handleImageUpload(e, item.id)}
-                                disabled={isUploading}
-                                className="hidden"
-                                data-testid={`input-camera-${item.id}`}
-                              />
-                            </label>
+                            </button>
                           )}
                         </div>
                         
@@ -1867,6 +1924,41 @@ export default function Staff() {
           </button>
         </div>
       </div>
+
+      <Dialog open={cameraOpen} onOpenChange={(open) => !open && closeCamera()}>
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden">
+          <DialogHeader className="p-4 pb-0">
+            <DialogTitle>Take Photo</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center">
+            <div className="relative w-full aspect-[4/3] bg-black">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+                data-testid="camera-video"
+              />
+              <canvas ref={canvasRef} className="hidden" />
+            </div>
+            <div className="flex gap-3 p-4 w-full">
+              <Button
+                onClick={capturePhoto}
+                className="flex-1"
+                disabled={!cameraStream || isUploading}
+                data-testid="button-capture"
+              >
+                <Camera className="w-4 h-4 mr-2" />
+                {isUploading ? 'Uploading...' : 'Capture'}
+              </Button>
+              <Button variant="outline" onClick={closeCamera} className="flex-1">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showBarcodeDialog} onOpenChange={setShowBarcodeDialog}>
         <DialogContent className="sm:max-w-sm">
