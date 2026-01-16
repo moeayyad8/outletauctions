@@ -26,6 +26,14 @@ const EBAY_CONDITION_LABELS: Record<string, string> = {
   "7000": "FOR_PARTS_OR_NOT_WORKING",
 };
 
+function getPublicImageUrl(image: string | null): string {
+  if (!image) return '';
+  if (image.startsWith('/objects/')) {
+    return `${window.location.origin}${image}`;
+  }
+  return image;
+}
+
 function generateEbayCSV(items: Auction[]): string {
   const headers = [
     '#INFO,Version=0.0.2,Template= eBay-draft-listings-template_US,,,,,,,,',
@@ -46,6 +54,7 @@ function generateEbayCSV(items: Auction[]): string {
     const priceInDollars = item.retailPrice ? (item.retailPrice / 100) : "";
     const escapedTitle = (item.title || "").replace(/"/g, '""');
     const escapedDesc = (item.description || "").replace(/"/g, '""');
+    const imageUrl = getPublicImageUrl(item.image);
     
     return [
       'Draft',
@@ -55,7 +64,7 @@ function generateEbayCSV(items: Auction[]): string {
       item.upc || '',
       priceInDollars,
       item.stockQuantity || 1,
-      item.image || '',
+      imageUrl,
       conditionLabel,
       `<p>${escapedDesc}</p>`,
       'FixedPrice',
