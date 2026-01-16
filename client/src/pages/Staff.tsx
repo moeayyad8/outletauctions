@@ -186,6 +186,7 @@ export default function Staff() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scanDefaultsRef = useRef<ScanDefaults>(scanDefaults);
+  const editingItemRef = useRef<string | null>(null);
   const { toast } = useToast();
   
   // Keep ref in sync with state for use in mutation callbacks
@@ -242,10 +243,14 @@ export default function Staff() {
     
     ctx.drawImage(video, 0, 0);
     
+    // Store itemId in ref before async operations to avoid closure issues
+    const itemId = cameraItemId;
+    editingItemRef.current = itemId;
+    setEditingItem(itemId);
+    
     canvas.toBlob(async (blob) => {
       if (!blob) return;
       const file = new File([blob], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
-      setEditingItem(cameraItemId);
       closeCamera();
       await uploadFile(file);
     }, 'image/jpeg', 0.9);
@@ -309,15 +314,21 @@ export default function Staff() {
 
   const { uploadFile, isUploading } = useUpload({
     onSuccess: (response) => {
-      if (editingItem) {
+      // Use ref to get current editingItem to avoid closure issues
+      const itemId = editingItemRef.current;
+      if (itemId) {
         setBatch(prev => prev.map(item => 
-          item.id === editingItem ? { ...item, customImage: response.objectPath } : item
+          item.id === itemId ? { ...item, customImage: response.objectPath } : item
         ));
+        editingItemRef.current = null;
+        setEditingItem(null);
       }
       toast({ title: 'Image uploaded!' });
     },
     onError: () => {
       toast({ title: 'Failed to upload image', variant: 'destructive' });
+      editingItemRef.current = null;
+      setEditingItem(null);
     }
   });
 
