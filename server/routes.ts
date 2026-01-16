@@ -576,6 +576,122 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin export endpoint - exports all inventory data as JSON for migration
+  // Note: Protected by isAuthenticated - only logged-in staff can export
+  app.get('/api/admin/export', isAuthenticated, async (req, res) => {
+    try {
+      const auctions = await storage.getAllAuctions();
+      const shelves = await storage.getAllShelves();
+      const tags = await storage.getAllTags();
+      const nextCode = await storage.getNextInternalCode();
+      
+      const exportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        data: {
+          auctions,
+          shelves,
+          tags,
+          nextInternalCode: nextCode,
+        }
+      };
+      
+      res.json(exportData);
+    } catch (error) {
+      console.error("Error exporting data:", error);
+      res.status(500).json({ message: "Failed to export data" });
+    }
+  });
+
+  // Admin import endpoint - imports inventory data from JSON backup
+  // Note: Protected by isAuthenticated - only logged-in staff can import
+  app.post('/api/admin/import', isAuthenticated, async (req, res) => {
+    try {
+      const { data } = req.body;
+      
+      if (!data || !data.auctions) {
+        return res.status(400).json({ message: "Invalid import data format" });
+      }
+      
+      let imported = { auctions: 0, tags: 0, skipped: 0 };
+      
+      // Import tags first if provided (to preserve tag IDs for auction references)
+      if (data.tags && Array.isArray(data.tags)) {
+        const existingTags = await storage.getAllTags();
+        const existingTagNames = new Set(existingTags.map(t => t.name.toLowerCase()));
+        
+        for (const tag of data.tags) {
+          if (!tag.name || existingTagNames.has(tag.name.toLowerCase())) {
+            continue;
+          }
+          try {
+            await storage.createTag({ name: tag.name, type: tag.type || 'category' });
+            existingTagNames.add(tag.name.toLowerCase());
+            imported.tags++;
+          } catch (err) {
+            console.error("Error importing tag:", tag.name, err);
+          }
+        }
+      }
+      
+      // Get existing internal codes to avoid duplicates
+      const existingAuctions = await storage.getAllAuctions();
+      const existingCodes = new Set(existingAuctions.map(a => a.internalCode).filter(Boolean));
+      
+      // Import auctions (skip id to let DB generate new ones, but preserve internalCode)
+      for (const auction of data.auctions) {
+        const { id, createdAt, currentBid, bidCount, ...auctionData } = auction;
+        
+        // Skip if internalCode already exists (avoid duplicates)
+        if (auctionData.internalCode && existingCodes.has(auctionData.internalCode)) {
+          imported.skipped++;
+          continue;
+        }
+        
+        try {
+          // Validate required fields
+          if (!auctionData.title) {
+            imported.skipped++;
+            continue;
+          }
+          
+          await storage.importAuction({
+            ...auctionData,
+            internalCode: auctionData.internalCode,
+            title: auctionData.title,
+            status: auctionData.status || 'draft',
+            destination: auctionData.destination || 'ebay',
+            startingBid: auctionData.startingBid || 1,
+            stockQuantity: auctionData.stockQuantity || 1,
+            needsReview: auctionData.needsReview || 0,
+          });
+          imported.auctions++;
+          
+          // Track the code so subsequent duplicates in same import are skipped
+          if (auctionData.internalCode) {
+            existingCodes.add(auctionData.internalCode);
+          }
+        } catch (err) {
+          console.error("Error importing auction:", auctionData.internalCode, err);
+          imported.skipped++;
+        }
+      }
+      
+      let message = `Imported ${imported.auctions} auctions`;
+      if (imported.tags > 0) message += `, ${imported.tags} tags`;
+      if (imported.skipped > 0) message += ` (${imported.skipped} skipped)`;
+      
+      res.json({ 
+        success: true, 
+        message,
+        imported 
+      });
+    } catch (error) {
+      console.error("Error importing data:", error);
+      res.status(500).json({ message: "Failed to import data" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

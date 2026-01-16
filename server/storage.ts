@@ -11,6 +11,7 @@ export interface IStorage {
   addToWatchlist(item: InsertWatchlist): Promise<Watchlist>;
   removeFromWatchlist(userId: string, auctionId: number): Promise<void>;
   createAuction(auction: InsertAuction): Promise<Auction>;
+  importAuction(auction: InsertAuction & { internalCode?: string }): Promise<Auction>;
   getAllAuctions(): Promise<Auction[]>;
   getActiveAuctions(): Promise<Auction[]>;
   getAuction(id: number): Promise<Auction | undefined>;
@@ -98,6 +99,15 @@ export class DatabaseStorage implements IStorage {
     const [newAuction] = await db.insert(auctions).values({
       ...auction,
       internalCode,
+    }).returning();
+    return newAuction;
+  }
+
+  // Import auction with existing internal code (for data migration)
+  async importAuction(auction: InsertAuction & { internalCode?: string }): Promise<Auction> {
+    const [newAuction] = await db.insert(auctions).values({
+      ...auction,
+      internalCode: auction.internalCode || await this.getNextInternalCode(),
     }).returning();
     return newAuction;
   }

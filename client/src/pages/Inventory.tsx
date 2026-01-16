@@ -1,11 +1,11 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Download, Package, Image as ImageIcon, Check, Clock, CheckCircle2, Upload } from "lucide-react";
+import { ArrowLeft, Download, Package, Image as ImageIcon, Check, Clock, CheckCircle2, Upload, Database, FileUp, FileDown } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Auction } from "@shared/schema";
@@ -189,6 +189,74 @@ export default function Inventory() {
     }
   };
 
+  // Data migration handlers
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+
+  const handleExportData = async () => {
+    setIsExporting(true);
+    try {
+      const response = await fetch('/api/admin/export');
+      if (!response.ok) throw new Error('Export failed');
+      
+      const exportData = await response.json();
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const timestamp = new Date().toISOString().slice(0, 10);
+      link.download = `outlet-auctions-backup-${timestamp}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      toast({ 
+        title: `Exported ${exportData.data.auctions.length} items`,
+        description: 'Backup saved. Upload to production to restore.'
+      });
+    } catch (error) {
+      toast({ title: 'Export failed', variant: 'destructive' });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImportData = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    setIsImporting(true);
+    try {
+      const text = await file.text();
+      const importData = JSON.parse(text);
+      
+      if (!importData.data?.auctions) {
+        throw new Error('Invalid backup file format');
+      }
+      
+      const response = await apiRequest('POST', '/api/admin/import', { data: importData.data });
+      const result = await response.json();
+      
+      queryClient.invalidateQueries({ queryKey: ['/api/staff/auctions'] });
+      
+      toast({ 
+        title: result.message,
+        description: 'Data imported successfully'
+      });
+    } catch (error) {
+      toast({ 
+        title: 'Import failed', 
+        description: error instanceof Error ? error.message : 'Invalid file',
+        variant: 'destructive' 
+      });
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -324,6 +392,55 @@ export default function Inventory() {
             <InventoryList items={amazonItems} />
           </TabsContent>
         </Tabs>
+
+        {/* Data Migration Section */}
+        <Card className="mt-6 border-dashed">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <Database className="w-4 h-4 text-muted-foreground" />
+              <CardTitle className="text-base">Data Migration</CardTitle>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Export from development, import to production
+            </p>
+          </CardHeader>
+          <CardContent className="pt-2">
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Button 
+                variant="outline" 
+                onClick={handleExportData}
+                disabled={isExporting}
+                className="flex-1"
+                data-testid="button-export-data"
+              >
+                <FileDown className="w-4 h-4 mr-2" />
+                {isExporting ? 'Exporting...' : 'Export All Data'}
+              </Button>
+              
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleImportData}
+                className="hidden"
+                data-testid="input-import-file"
+              />
+              <Button 
+                variant="outline" 
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isImporting}
+                className="flex-1"
+                data-testid="button-import-data"
+              >
+                <FileUp className="w-4 h-4 mr-2" />
+                {isImporting ? 'Importing...' : 'Import Data'}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground text-center mt-3">
+              Exports all inventory items and tags. Import on production after deploying.
+            </p>
+          </CardContent>
+        </Card>
       </main>
     </div>
   );
