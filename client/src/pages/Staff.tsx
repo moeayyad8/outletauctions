@@ -995,7 +995,20 @@ export default function Staff() {
                                   data-testid={`input-title-${item.id}`}
                                 />
                               )}
-                              <p className="text-[11px] text-muted-foreground font-mono mt-0.5">{item.code}</p>
+                              <div className="flex items-center gap-1 mt-0.5">
+                                <p className="text-[11px] text-muted-foreground font-mono">{item.code}</p>
+                                {item.code.startsWith('OA') && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-5 w-5"
+                                    onClick={() => handlePrintBarcode(item.code)}
+                                    data-testid={`button-print-${item.id}`}
+                                  >
+                                    <Printer className="w-3 h-3" />
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                             <Button
                               variant="ghost"
