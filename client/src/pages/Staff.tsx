@@ -182,6 +182,7 @@ export default function Staff() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraItemId, setCameraItemId] = useState<string | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraFacing, setCameraFacing] = useState<'environment' | 'user'>('environment');
   const barcodeRef = useRef<SVGSVGElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -204,21 +205,43 @@ export default function Staff() {
   };
 
   // Camera functions
-  const openCamera = async (itemId: string) => {
-    setCameraItemId(itemId);
-    setCameraOpen(true);
+  const startCameraStream = async (facing: 'environment' | 'user') => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } }
       });
       setCameraStream(stream);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
+      return true;
     } catch (err) {
       console.error('Camera access error:', err);
+      return false;
+    }
+  };
+
+  const openCamera = async (itemId: string) => {
+    setCameraItemId(itemId);
+    setCameraOpen(true);
+    const success = await startCameraStream(cameraFacing);
+    if (!success) {
       toast({ title: 'Could not access camera', variant: 'destructive' });
       setCameraOpen(false);
+    }
+  };
+
+  const flipCamera = async () => {
+    // Stop current stream
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+    }
+    // Switch facing mode
+    const newFacing = cameraFacing === 'environment' ? 'user' : 'environment';
+    setCameraFacing(newFacing);
+    const success = await startCameraStream(newFacing);
+    if (!success) {
+      toast({ title: 'Could not switch camera', variant: 'destructive' });
     }
   };
 
@@ -1938,8 +1961,17 @@ export default function Staff() {
 
       <Dialog open={cameraOpen} onOpenChange={(open) => !open && closeCamera()}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden">
-          <DialogHeader className="p-4 pb-0">
+          <DialogHeader className="p-4 pb-0 flex flex-row items-center justify-between">
             <DialogTitle>Take Photo</DialogTitle>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={flipCamera}
+              disabled={!cameraStream}
+              data-testid="button-flip-camera"
+            >
+              <RotateCcw className="w-5 h-5" />
+            </Button>
           </DialogHeader>
           <div className="flex flex-col items-center">
             <div className="relative w-full aspect-[4/3] bg-black">
@@ -1948,10 +1980,13 @@ export default function Staff() {
                 autoPlay
                 playsInline
                 muted
-                className="w-full h-full object-cover"
+                className={`w-full h-full object-cover ${cameraFacing === 'user' ? 'scale-x-[-1]' : ''}`}
                 data-testid="camera-video"
               />
               <canvas ref={canvasRef} className="hidden" />
+              <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
+                {cameraFacing === 'environment' ? 'Back' : 'Front'}
+              </div>
             </div>
             <div className="flex gap-3 p-4 w-full">
               <Button
