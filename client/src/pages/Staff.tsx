@@ -182,7 +182,7 @@ export default function Staff() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraItemId, setCameraItemId] = useState<string | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const [cameraFacing, setCameraFacing] = useState<'environment' | 'user'>('environment');
+  const [cameraRotation, setCameraRotation] = useState<0 | 90 | 180 | 270>(0);
   const barcodeRef = useRef<SVGSVGElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -205,44 +205,27 @@ export default function Staff() {
   };
 
   // Camera functions
-  const startCameraStream = async (facing: 'environment' | 'user') => {
+  const openCamera = async (itemId: string) => {
+    setCameraItemId(itemId);
+    setCameraOpen(true);
+    setCameraRotation(0);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } }
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
       });
       setCameraStream(stream);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
-      return true;
     } catch (err) {
       console.error('Camera access error:', err);
-      return false;
-    }
-  };
-
-  const openCamera = async (itemId: string) => {
-    setCameraItemId(itemId);
-    setCameraOpen(true);
-    const success = await startCameraStream(cameraFacing);
-    if (!success) {
       toast({ title: 'Could not access camera', variant: 'destructive' });
       setCameraOpen(false);
     }
   };
 
-  const flipCamera = async () => {
-    // Stop current stream
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(track => track.stop());
-    }
-    // Switch facing mode
-    const newFacing = cameraFacing === 'environment' ? 'user' : 'environment';
-    setCameraFacing(newFacing);
-    const success = await startCameraStream(newFacing);
-    if (!success) {
-      toast({ title: 'Could not switch camera', variant: 'destructive' });
-    }
+  const rotateCamera = () => {
+    setCameraRotation(prev => ((prev + 90) % 360) as 0 | 90 | 180 | 270);
   };
 
   const closeCamera = () => {
@@ -259,12 +242,26 @@ export default function Staff() {
     
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
-    ctx.drawImage(video, 0, 0);
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    
+    // Apply rotation to canvas
+    if (cameraRotation === 90 || cameraRotation === 270) {
+      canvas.width = vh;
+      canvas.height = vw;
+    } else {
+      canvas.width = vw;
+      canvas.height = vh;
+    }
+    
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate((cameraRotation * Math.PI) / 180);
+    ctx.drawImage(video, -vw / 2, -vh / 2);
+    ctx.restore();
     
     // Store itemId in ref before async operations to avoid closure issues
     const itemId = cameraItemId;
@@ -1965,28 +1962,28 @@ export default function Staff() {
             <DialogTitle>Take Photo</DialogTitle>
             <Button
               variant="ghost"
-              size="icon"
-              onClick={flipCamera}
+              size="sm"
+              onClick={rotateCamera}
               disabled={!cameraStream}
-              data-testid="button-flip-camera"
+              data-testid="button-rotate-camera"
+              className="gap-1"
             >
-              <RotateCcw className="w-5 h-5" />
+              <RotateCcw className="w-4 h-4" />
+              <span className="text-xs">{cameraRotation}°</span>
             </Button>
           </DialogHeader>
           <div className="flex flex-col items-center">
-            <div className="relative w-full aspect-[4/3] bg-black">
+            <div className="relative w-full aspect-[4/3] bg-black overflow-hidden flex items-center justify-center">
               <video
                 ref={videoRef}
                 autoPlay
                 playsInline
                 muted
-                className={`w-full h-full object-cover ${cameraFacing === 'user' ? 'scale-x-[-1]' : ''}`}
+                className="max-w-full max-h-full object-contain"
+                style={{ transform: `rotate(${cameraRotation}deg)` }}
                 data-testid="camera-video"
               />
               <canvas ref={canvasRef} className="hidden" />
-              <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
-                {cameraFacing === 'environment' ? 'Back' : 'Front'}
-              </div>
             </div>
             <div className="flex gap-3 p-4 w-full">
               <Button
