@@ -1,11 +1,25 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { insertBidSchema, insertWatchlistSchema, insertAuctionSchema, insertTagSchema } from "@shared/schema";
 import { scanCode } from "./upcService";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { calculateRouting, getRoutingInputFromAuction } from "./routingService";
+
+// Store connected WebSocket clients
+const wsClients = new Set<WebSocket>();
+
+// Broadcast to all connected clients
+function broadcast(type: string, data: any) {
+  const message = JSON.stringify({ type, data });
+  wsClients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   await setupAuth(app);
@@ -188,6 +202,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           routingResult.primary === 'whatnot' ? 'whatnot' : 'other'
         );
       }
+      
+      // Get shelf info for live view
+      const shelf = await storage.getShelf(auction.shelfId!);
+      
+      // Broadcast new scan to live view clients
+      broadcast('new_scan', {
+        auction: updatedAuction || auction,
+        shelfCode: shelf?.code || 'Unknown'
+      });
       
       res.json(updatedAuction || auction);
     } catch (error) {
@@ -693,5 +716,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+  
+  // Set up WebSocket server for live view
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  
+  wss.on('connection', (ws) => {
+    console.log('Live view client connected');
+    wsClients.add(ws);
+    
+    ws.on('close', () => {
+      console.log('Live view client disconnected');
+      wsClients.delete(ws);
+    });
+    
+    ws.on('error', (error) => {
+      console.error('WebSocket error:', error);
+      wsClients.delete(ws);
+    });
+  });
+  
   return httpServer;
 }

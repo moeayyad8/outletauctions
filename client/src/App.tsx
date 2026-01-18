@@ -10,6 +10,7 @@ import Profile from "@/pages/Profile";
 import Staff from "@/pages/Staff";
 import Inventory from "@/pages/Inventory";
 import RetailValueFinder from "@/pages/RetailValueFinder";
+import LiveView from "@/pages/LiveView";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -22,6 +23,7 @@ function Router() {
       <Route path="/staff" component={Staff} />
       <Route path="/inventory" component={Inventory} />
       <Route path="/value-finder" component={RetailValueFinder} />
+      <Route path="/live" component={LiveView} />
       <Route component={NotFound} />
     </Switch>
   );
