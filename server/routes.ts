@@ -665,6 +665,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Skip if internalCode already exists (avoid duplicates)
         if (auctionData.internalCode && existingCodes.has(auctionData.internalCode)) {
+          console.log("Skipping duplicate:", auctionData.internalCode, "destination:", auctionData.destination);
           imported.skipped++;
           continue;
         }
@@ -672,20 +673,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           // Validate required fields
           if (!auctionData.title) {
+            console.log("Skipping no title:", auctionData.internalCode, "destination:", auctionData.destination);
             imported.skipped++;
             continue;
           }
           
-          await storage.importAuction({
-            ...auctionData,
-            internalCode: auctionData.internalCode,
+          // Clean up any fields that might cause issues
+          const cleanAuctionData = {
             title: auctionData.title,
+            description: auctionData.description || null,
+            imageUrl: auctionData.imageUrl || null,
+            additionalImages: auctionData.additionalImages || null,
+            startingBid: auctionData.startingBid || 1,
             status: auctionData.status || 'draft',
             destination: auctionData.destination || 'ebay',
-            startingBid: auctionData.startingBid || 1,
             stockQuantity: auctionData.stockQuantity || 1,
             needsReview: auctionData.needsReview || 0,
-          });
+            internalCode: auctionData.internalCode,
+            upcCode: auctionData.upcCode || null,
+            brand: auctionData.brand || null,
+            model: auctionData.model || null,
+            condition: auctionData.condition || null,
+            weightOunces: auctionData.weightOunces || null,
+            shelfId: auctionData.shelfId || null,
+            routingPrimary: auctionData.routingPrimary || null,
+            routingSecondary: auctionData.routingSecondary || null,
+            routingScores: auctionData.routingScores || null,
+            externalStatus: auctionData.externalStatus || null,
+            externalListingId: auctionData.externalListingId || null,
+            externalListingUrl: auctionData.externalListingUrl || null,
+            externalPayload: auctionData.externalPayload || null,
+            ebayStatus: auctionData.ebayStatus || null,
+            lastExportedAt: auctionData.lastExportedAt ? new Date(auctionData.lastExportedAt) : null,
+          };
+          
+          await storage.importAuction(cleanAuctionData);
+          console.log("Imported:", cleanAuctionData.internalCode, "destination:", cleanAuctionData.destination);
           imported.auctions++;
           
           // Track the code so subsequent duplicates in same import are skipped
@@ -693,7 +716,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             existingCodes.add(auctionData.internalCode);
           }
         } catch (err) {
-          console.error("Error importing auction:", auctionData.internalCode, err);
+          console.error("Error importing auction:", auctionData.internalCode, "destination:", auctionData.destination, err);
           imported.skipped++;
         }
       }
