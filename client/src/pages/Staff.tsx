@@ -280,18 +280,30 @@ export default function Staff() {
     setCameraItemId(itemId);
     setCameraOpen(true);
     setCameraRotation(0);
+    
+    // Check if getUserMedia is supported
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      console.error('getUserMedia not supported');
+      toast({ title: 'Camera not supported in this browser', variant: 'destructive' });
+      return; // Keep dialog open to show message
+    }
+    
     try {
+      console.log('Requesting camera access...');
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
       });
+      console.log('Camera access granted, stream:', stream);
       setCameraStream(stream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Camera access error:', err);
-      toast({ title: 'Could not access camera', variant: 'destructive' });
-      setCameraOpen(false);
+      const errorMessage = err.name === 'NotAllowedError' 
+        ? 'Camera access denied. Check browser settings.'
+        : err.name === 'NotFoundError'
+        ? 'No camera found on this device'
+        : `Camera error: ${err.message || err.name}`;
+      toast({ title: errorMessage, variant: 'destructive' });
+      // Don't close dialog - let user see the error and close manually
     }
   };
 
