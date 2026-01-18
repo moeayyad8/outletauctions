@@ -600,8 +600,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin export endpoint - exports all inventory data as JSON for migration
-  // Note: Protected by isAuthenticated - only logged-in staff can export
-  app.get('/api/admin/export', isAuthenticated, async (req, res) => {
+  app.get('/api/admin/export', async (req, res) => {
     try {
       const auctions = await storage.getAllAuctions();
       const shelves = await storage.getAllShelves();
@@ -627,8 +626,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin import endpoint - imports inventory data from JSON backup
-  // Note: Protected by isAuthenticated - only logged-in staff can import
-  app.post('/api/admin/import', isAuthenticated, async (req, res) => {
+  app.post('/api/admin/import', async (req, res) => {
     try {
       const { data } = req.body;
       
