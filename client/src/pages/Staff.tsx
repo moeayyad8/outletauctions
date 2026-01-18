@@ -164,7 +164,76 @@ function RoutingScoresDisplay({
   );
 }
 
+const STAFF_PASSWORD = '4406';
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_DAYS = 30;
+
+function getStaffAuthState(): { authenticated: boolean; attempts: number; lockedUntil: number | null } {
+  try {
+    const stored = localStorage.getItem('staffAuth');
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.error('Failed to load staff auth state:', e);
+  }
+  return { authenticated: false, attempts: 0, lockedUntil: null };
+}
+
+function saveStaffAuthState(state: { authenticated: boolean; attempts: number; lockedUntil: number | null }) {
+  try {
+    localStorage.setItem('staffAuth', JSON.stringify(state));
+  } catch (e) {
+    console.error('Failed to save staff auth state:', e);
+  }
+}
+
 export default function Staff() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    const state = getStaffAuthState();
+    if (state.lockedUntil && Date.now() < state.lockedUntil) {
+      return false;
+    }
+    return state.authenticated;
+  });
+  const [passwordInput, setPasswordInput] = useState('');
+  const [attempts, setAttempts] = useState(() => getStaffAuthState().attempts);
+  const [lockedUntil, setLockedUntil] = useState<number | null>(() => getStaffAuthState().lockedUntil);
+  const [loginError, setLoginError] = useState('');
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Check if still locked out
+    if (lockedUntil && Date.now() < lockedUntil) {
+      const daysLeft = Math.ceil((lockedUntil - Date.now()) / (1000 * 60 * 60 * 24));
+      setLoginError(`Account locked. Try again in ${daysLeft} days.`);
+      return;
+    }
+    
+    if (passwordInput === STAFF_PASSWORD) {
+      setIsAuthenticated(true);
+      setAttempts(0);
+      setLockedUntil(null);
+      setLoginError('');
+      saveStaffAuthState({ authenticated: true, attempts: 0, lockedUntil: null });
+    } else {
+      const newAttempts = attempts + 1;
+      setAttempts(newAttempts);
+      setPasswordInput('');
+      
+      if (newAttempts >= MAX_ATTEMPTS) {
+        const lockTime = Date.now() + (LOCKOUT_DAYS * 24 * 60 * 60 * 1000);
+        setLockedUntil(lockTime);
+        setLoginError(`Too many failed attempts. Account locked for ${LOCKOUT_DAYS} days.`);
+        saveStaffAuthState({ authenticated: false, attempts: newAttempts, lockedUntil: lockTime });
+      } else {
+        setLoginError(`Incorrect password. ${MAX_ATTEMPTS - newAttempts} attempts remaining.`);
+        saveStaffAuthState({ authenticated: false, attempts: newAttempts, lockedUntil: null });
+      }
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<TabType>('scanner');
   const [code, setCode] = useState('');
   const [batch, setBatch] = useState<BatchItem[]>([]);
@@ -716,6 +785,63 @@ export default function Staff() {
       await uploadFile(file);
     }
   };
+
+  // Show login screen if not authenticated
+  if (!isAuthenticated) {
+    const isLocked = lockedUntil && Date.now() < lockedUntil;
+    const daysLeft = isLocked ? Math.ceil((lockedUntil - Date.now()) / (1000 * 60 * 60 * 24)) : 0;
+    
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-sm">
+          <CardContent className="pt-6 space-y-6">
+            <div className="text-center space-y-2">
+              <div className="w-16 h-16 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
+                <LogIn className="w-8 h-8 text-primary" />
+              </div>
+              <h1 className="text-xl font-bold">Staff Access</h1>
+              <p className="text-sm text-muted-foreground">Enter password to continue</p>
+            </div>
+            
+            {isLocked ? (
+              <div className="text-center space-y-4">
+                <div className="p-4 bg-destructive/10 rounded-lg">
+                  <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-destructive" />
+                  <p className="text-sm font-medium text-destructive">Account Locked</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Too many failed attempts. Try again in {daysLeft} days.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handlePasswordSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Input
+                    type="password"
+                    placeholder="Enter password"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    className="text-center text-lg tracking-widest"
+                    autoFocus
+                    data-testid="input-staff-password"
+                  />
+                  {loginError && (
+                    <p className="text-sm text-destructive text-center" data-testid="text-login-error">
+                      {loginError}
+                    </p>
+                  )}
+                </div>
+                <Button type="submit" className="w-full" data-testid="button-staff-login">
+                  <LogIn className="w-4 h-4 mr-2" />
+                  Access Staff Portal
+                </Button>
+              </form>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-20">
