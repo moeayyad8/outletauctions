@@ -347,6 +347,13 @@ export default function Staff() {
     }, 'image/jpeg', 0.9);
   };
 
+  // Connect camera stream to video element when both are available
+  useEffect(() => {
+    if (cameraStream && videoRef.current) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream, cameraOpen]);
+  
   // Cleanup camera on unmount
   useEffect(() => {
     return () => {
