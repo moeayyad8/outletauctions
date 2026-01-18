@@ -86,8 +86,14 @@ export async function scanCode(code: string): Promise<ScanResult> {
     const apiKey = process.env.UPCITEMDB_API_KEY;
     
     let response;
+    const apiUrl = apiKey 
+      ? `https://api.upcitemdb.com/prod/v1/lookup?upc=${cleaned}`
+      : `${UPCITEMDB_API_URL}?upc=${cleaned}`;
+    
+    console.log(`[UPC] Looking up code: ${cleaned}, using ${apiKey ? 'paid' : 'trial'} API`);
+    
     if (apiKey) {
-      response = await fetch(`https://api.upcitemdb.com/prod/v1/lookup?upc=${cleaned}`, {
+      response = await fetch(apiUrl, {
         headers: {
           "Content-Type": "application/json",
           "user_key": apiKey,
@@ -95,12 +101,16 @@ export async function scanCode(code: string): Promise<ScanResult> {
         }
       });
     } else {
-      response = await fetch(`${UPCITEMDB_API_URL}?upc=${cleaned}`, {
+      response = await fetch(apiUrl, {
         headers: { "Content-Type": "application/json" }
       });
     }
 
+    console.log(`[UPC] Response status: ${response.status}`);
+    
     if (!response.ok) {
+      const errorText = await response.text();
+      console.log(`[UPC] Error response: ${errorText}`);
       return {
         code: cleaned,
         codeType,
@@ -114,6 +124,7 @@ export async function scanCode(code: string): Promise<ScanResult> {
     }
 
     const data = await response.json();
+    console.log(`[UPC] Found ${data.items?.length || 0} items`);
     
     if (!data.items || data.items.length === 0) {
       return {
