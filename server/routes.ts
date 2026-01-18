@@ -103,6 +103,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Diagnostic endpoint to test UPC API directly
+  app.get('/api/upc-diagnostic/:code', async (req, res) => {
+    try {
+      const code = req.params.code;
+      const UPCITEMDB_API_URL = "https://api.upcitemdb.com/prod/trial/lookup";
+      
+      const response = await fetch(`${UPCITEMDB_API_URL}?upc=${code}`, {
+        headers: { "Content-Type": "application/json" }
+      });
+      
+      const responseText = await response.text();
+      let responseJson;
+      try {
+        responseJson = JSON.parse(responseText);
+      } catch {
+        responseJson = null;
+      }
+      
+      res.json({
+        code,
+        apiStatus: response.status,
+        apiStatusText: response.statusText,
+        apiHeaders: Object.fromEntries(response.headers.entries()),
+        apiResponse: responseJson || responseText,
+        hasApiKey: !!process.env.UPCITEMDB_API_KEY,
+        environment: process.env.NODE_ENV
+      });
+    } catch (error: any) {
+      res.json({
+        error: error.message,
+        stack: error.stack
+      });
+    }
+  });
+
   // Staff endpoints - UPC/EAN/ASIN scanning and auction management
   app.post('/api/scan', async (req, res) => {
     try {
