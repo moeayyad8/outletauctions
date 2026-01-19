@@ -10,7 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useUpload } from '@/hooks/use-upload';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel, Store, ExternalLink, Grid3X3, ArrowRightLeft, LogIn, LogOut, AlertTriangle, CheckCircle2, Scale, ChevronDown, ChevronUp, Flag, Search, Settings2, RotateCcw } from 'lucide-react';
+import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel, Store, ExternalLink, Grid3X3, ArrowRightLeft, LogIn, LogOut, AlertTriangle, CheckCircle2, Scale, ChevronDown, ChevronUp, Flag, Search, Settings2, RotateCcw, Shirt } from 'lucide-react';
 import { SiAmazon, SiEbay } from 'react-icons/si';
 import JsBarcode from 'jsbarcode';
 import type { Auction, Tag as TagType, Shelf } from '@shared/schema';
@@ -869,9 +869,17 @@ export default function Staff() {
           <header className="pt-2">
             <div className="flex items-center justify-between mb-1">
               <h1 className="text-2xl font-bold tracking-tight">Scanner</h1>
-              <Badge variant="secondary" className="font-mono text-xs">
-                {batch.length} in batch
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Link href="/clothes">
+                  <Button variant="outline" size="sm" data-testid="button-clothes-scanner">
+                    <Shirt className="w-4 h-4 mr-1" />
+                    Clothes
+                  </Button>
+                </Link>
+                <Badge variant="secondary" className="font-mono text-xs">
+                  {batch.length} in batch
+                </Badge>
+              </div>
             </div>
             <p className="text-sm text-muted-foreground">Scan products to build your batch</p>
           </header>

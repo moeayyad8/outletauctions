@@ -216,3 +216,70 @@ export type WeightClass = typeof WEIGHT_CLASS_OPTIONS[number];
 // Platform options
 export const PLATFORM_OPTIONS = ["whatnot", "ebay", "amazon"] as const;
 export type Platform = typeof PLATFORM_OPTIONS[number];
+
+// Clothes inventory table - for Depop and clothing platforms
+export const clothesInventory = pgTable("clothes_inventory", {
+  id: serial("id").primaryKey(),
+  sku: varchar("sku", { length: 20 }).notNull().unique(), // OAC0000001 format
+  upc: varchar("upc", { length: 20 }),
+  description: text("description"), // Max 1000 chars, max 5 hashtags
+  category: varchar("category", { length: 100 }),
+  price: integer("price"), // In cents
+  brand: varchar("brand", { length: 200 }),
+  condition: varchar("condition", { length: 50 }).default("New"),
+  size: varchar("size", { length: 50 }),
+  color1: varchar("color_1", { length: 50 }),
+  color2: varchar("color_2", { length: 50 }),
+  source1: varchar("source_1", { length: 100 }).default("Target"),
+  source2: varchar("source_2", { length: 100 }),
+  age: varchar("age", { length: 50 }),
+  style1: varchar("style_1", { length: 100 }),
+  style2: varchar("style_2", { length: 100 }),
+  style3: varchar("style_3", { length: 100 }),
+  location: varchar("location", { length: 200 }),
+  pictureHero: varchar("picture_hero", { length: 1000 }),
+  picture2: varchar("picture_2", { length: 1000 }),
+  picture3: varchar("picture_3", { length: 1000 }),
+  picture4: varchar("picture_4", { length: 1000 }),
+  picture5: varchar("picture_5", { length: 1000 }),
+  picture6: varchar("picture_6", { length: 1000 }),
+  picture7: varchar("picture_7", { length: 1000 }),
+  picture8: varchar("picture_8", { length: 1000 }),
+  domesticShipping: integer("domestic_shipping"), // In cents
+  internationalShipping: integer("international_shipping"), // In cents
+  shelfId: integer("shelf_id"),
+  status: varchar("status", { length: 20 }).notNull().default("draft"),
+  lastExportedAt: timestamp("last_exported_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertClothesSchema = createInsertSchema(clothesInventory).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertClothes = z.infer<typeof insertClothesSchema>;
+export type ClothesItem = typeof clothesInventory.$inferSelect;
+
+// Depop category options
+export const DEPOP_CATEGORIES = [
+  "Tops", "Bottoms", "Dresses", "Outerwear", "Activewear", 
+  "Intimates", "Swimwear", "Accessories", "Shoes", "Bags",
+  "Jewelry", "Vintage", "Handmade", "Other"
+] as const;
+
+// Depop condition options
+export const DEPOP_CONDITIONS = [
+  "Brand New", "Like New", "Used - Excellent", "Used - Good", "Used - Fair"
+] as const;
+
+// Depop size options
+export const DEPOP_SIZES = [
+  "XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL",
+  "One Size", "0", "2", "4", "6", "8", "10", "12", "14", "16"
+] as const;
+
+// Depop color options
+export const DEPOP_COLORS = [
+  "Black", "White", "Gray", "Red", "Pink", "Orange", "Yellow", 
+  "Green", "Blue", "Purple", "Brown", "Cream", "Gold", "Silver", "Multi"
+] as const;

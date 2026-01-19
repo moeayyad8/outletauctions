@@ -1,4 +1,4 @@
-import { users, bids, watchlist, auctions, tags, auctionTags, shelves, routingConfig, brandRoutingStats, type User, type UpsertUser, type Bid, type InsertBid, type Watchlist, type InsertWatchlist, type Auction, type InsertAuction, type Tag, type InsertTag, type AuctionTag, type Shelf, type InsertShelf, type RoutingConfig, type BrandRoutingStat } from "@shared/schema";
+import { users, bids, watchlist, auctions, tags, auctionTags, shelves, routingConfig, brandRoutingStats, clothesInventory, type User, type UpsertUser, type Bid, type InsertBid, type Watchlist, type InsertWatchlist, type Auction, type InsertAuction, type Tag, type InsertTag, type AuctionTag, type Shelf, type InsertShelf, type RoutingConfig, type BrandRoutingStat, type ClothesItem, type InsertClothes } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, like, inArray, sql } from "drizzle-orm";
 
@@ -47,6 +47,14 @@ export interface IStorage {
   }): Promise<Auction | undefined>;
   markAuctionsExported(ids: number[]): Promise<void>;
   markAuctionsListed(ids: number[]): Promise<void>;
+  // Clothes inventory
+  createClothesItem(item: InsertClothes): Promise<ClothesItem>;
+  getAllClothesItems(): Promise<ClothesItem[]>;
+  getClothesItem(id: number): Promise<ClothesItem | undefined>;
+  updateClothesItem(id: number, data: Partial<InsertClothes>): Promise<ClothesItem | undefined>;
+  deleteClothesItem(id: number): Promise<void>;
+  getNextClothesSku(): Promise<string>;
+  markClothesExported(ids: number[]): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -354,6 +362,56 @@ export class DatabaseStorage implements IStorage {
     await db.update(auctions)
       .set({ ebayStatus: 'listed' })
       .where(inArray(auctions.id, ids));
+  }
+
+  // Clothes inventory methods
+  async getNextClothesSku(): Promise<string> {
+    const [result] = await db.select({ sku: clothesInventory.sku })
+      .from(clothesInventory)
+      .orderBy(desc(clothesInventory.id))
+      .limit(1);
+    
+    if (!result) {
+      return 'OAC0000001';
+    }
+    
+    const currentNumber = parseInt(result.sku.replace('OAC', ''), 10);
+    const nextNumber = currentNumber + 1;
+    return `OAC${nextNumber.toString().padStart(7, '0')}`;
+  }
+
+  async createClothesItem(item: InsertClothes): Promise<ClothesItem> {
+    const sku = await this.getNextClothesSku();
+    const [newItem] = await db.insert(clothesInventory).values({
+      ...item,
+      sku,
+    }).returning();
+    return newItem;
+  }
+
+  async getAllClothesItems(): Promise<ClothesItem[]> {
+    return db.select().from(clothesInventory).orderBy(desc(clothesInventory.createdAt));
+  }
+
+  async getClothesItem(id: number): Promise<ClothesItem | undefined> {
+    const [item] = await db.select().from(clothesInventory).where(eq(clothesInventory.id, id));
+    return item;
+  }
+
+  async updateClothesItem(id: number, data: Partial<InsertClothes>): Promise<ClothesItem | undefined> {
+    const [updated] = await db.update(clothesInventory).set(data).where(eq(clothesInventory.id, id)).returning();
+    return updated;
+  }
+
+  async deleteClothesItem(id: number): Promise<void> {
+    await db.delete(clothesInventory).where(eq(clothesInventory.id, id));
+  }
+
+  async markClothesExported(ids: number[]): Promise<void> {
+    if (ids.length === 0) return;
+    await db.update(clothesInventory)
+      .set({ lastExportedAt: new Date() })
+      .where(inArray(clothesInventory.id, ids));
   }
 }
 

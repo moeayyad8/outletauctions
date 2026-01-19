@@ -771,6 +771,141 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // === Clothes Inventory Endpoints ===
+  
+  // Get all clothes items
+  app.get('/api/clothes', async (req, res) => {
+    try {
+      const items = await storage.getAllClothesItems();
+      res.json(items);
+    } catch (error) {
+      console.error("Error fetching clothes:", error);
+      res.status(500).json({ message: "Failed to fetch clothes inventory" });
+    }
+  });
+
+  // Create a new clothes item
+  app.post('/api/clothes', async (req, res) => {
+    try {
+      const item = await storage.createClothesItem(req.body);
+      res.json(item);
+    } catch (error) {
+      console.error("Error creating clothes item:", error);
+      res.status(500).json({ message: "Failed to create clothes item" });
+    }
+  });
+
+  // Get single clothes item
+  app.get('/api/clothes/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const item = await storage.getClothesItem(id);
+      if (!item) {
+        return res.status(404).json({ message: "Item not found" });
+      }
+      res.json(item);
+    } catch (error) {
+      console.error("Error fetching clothes item:", error);
+      res.status(500).json({ message: "Failed to fetch clothes item" });
+    }
+  });
+
+  // Update clothes item
+  app.patch('/api/clothes/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const item = await storage.updateClothesItem(id, req.body);
+      if (!item) {
+        return res.status(404).json({ message: "Item not found" });
+      }
+      res.json(item);
+    } catch (error) {
+      console.error("Error updating clothes item:", error);
+      res.status(500).json({ message: "Failed to update clothes item" });
+    }
+  });
+
+  // Delete clothes item
+  app.delete('/api/clothes/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteClothesItem(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting clothes item:", error);
+      res.status(500).json({ message: "Failed to delete clothes item" });
+    }
+  });
+
+  // Export clothes to Depop CSV
+  app.get('/api/clothes/export/depop', async (req, res) => {
+    try {
+      const items = await storage.getAllClothesItems();
+      
+      // Build CSV header
+      const headers = [
+        'Description', 'Category', 'Price', 'Brand', 'Condition', 'Size',
+        'Color 1', 'Color 2', 'Source 1', 'Source 2', 'Age',
+        'Style 1', 'Style 2', 'Style 3', 'Location',
+        'Picture Hero url', 'Picture 2 url', 'Picture 3 url', 'Picture 4 url',
+        'Picture 5 url', 'Picture 6 url', 'Picture 7 url', 'Picture 8 url',
+        'Domestic Shipping price', 'International Shipping price', 'SKU'
+      ];
+      
+      const rows = items.map(item => {
+        // Convert photo URLs to full URLs if they're relative paths
+        const getFullUrl = (path: string | null) => {
+          if (!path) return '';
+          if (path.startsWith('http')) return path;
+          const baseUrl = process.env.REPLIT_DOMAINS?.split(',')[0] || '';
+          return baseUrl ? `https://${baseUrl}${path}` : path;
+        };
+        
+        return [
+          item.description || '',
+          item.category || '',
+          item.price ? (item.price / 100).toFixed(2) : '',
+          item.brand || '',
+          item.condition || 'New',
+          item.size || '',
+          item.color1 || '',
+          item.color2 || '',
+          item.source1 || 'Target',
+          item.source2 || '',
+          item.age || '',
+          item.style1 || '',
+          item.style2 || '',
+          item.style3 || '',
+          item.location || '',
+          getFullUrl(item.pictureHero),
+          getFullUrl(item.picture2),
+          getFullUrl(item.picture3),
+          getFullUrl(item.picture4),
+          getFullUrl(item.picture5),
+          getFullUrl(item.picture6),
+          getFullUrl(item.picture7),
+          getFullUrl(item.picture8),
+          item.domesticShipping ? (item.domesticShipping / 100).toFixed(2) : '',
+          item.internationalShipping ? (item.internationalShipping / 100).toFixed(2) : '',
+          item.sku
+        ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(',');
+      });
+      
+      const csv = [headers.join(','), ...rows].join('\n');
+      
+      // Mark items as exported
+      const ids = items.map(i => i.id);
+      await storage.markClothesExported(ids);
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="depop_export.csv"');
+      res.send(csv);
+    } catch (error) {
+      console.error("Error exporting clothes to CSV:", error);
+      res.status(500).json({ message: "Failed to export clothes" });
+    }
+  });
+
   const httpServer = createServer(app);
   
   // Set up WebSocket server for live view
