@@ -248,30 +248,39 @@ export default function Clothes() {
     setCameraOpen(true);
   };
   
-  useEffect(() => {
-    if (cameraOpen && videoRef.current) {
-      navigator.mediaDevices.getUserMedia({ 
+  const startCamera = async () => {
+    try {
+      console.log('Requesting camera access...');
+      const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } 
-      })
-        .then((stream) => {
-          streamRef.current = stream;
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-          }
-        })
-        .catch((err) => {
-          console.error('Camera error:', err);
-          toast({ title: 'Camera access denied', variant: 'destructive' });
-          setCameraOpen(false);
-        });
+      });
+      console.log('Camera access granted');
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error('Camera error:', err);
+      toast({ title: 'Camera access denied', variant: 'destructive' });
+      setCameraOpen(false);
     }
-    
-    return () => {
+  };
+  
+  useEffect(() => {
+    if (cameraOpen) {
+      // Small delay to allow Dialog to mount the video element
+      const timer = setTimeout(() => {
+        if (videoRef.current && !streamRef.current) {
+          startCamera();
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    } else {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
       }
-    };
+    }
   }, [cameraOpen]);
   
   const capturePhoto = async () => {
