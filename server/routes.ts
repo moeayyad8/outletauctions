@@ -891,7 +891,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(',');
       });
       
-      const csv = [headers.join(','), ...rows].join('\n');
+      // Depop template requires version header as first line
+      const templateVersion = 'Template version: 6' + ','.repeat(25); // 26 total columns
+      const csv = [templateVersion, headers.join(','), ...rows].join('\n');
       
       // Mark items as exported
       const ids = items.map(i => i.id);
