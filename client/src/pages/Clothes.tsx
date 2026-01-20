@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useUpload } from '@/hooks/use-upload';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Package, Camera, X, Plus, Trash2, ScanLine, Download, ArrowLeft, ImagePlus, LogIn, LogOut, Shirt, RotateCw, FlipHorizontal2, ZoomIn } from 'lucide-react';
+import { Package, Camera, X, Plus, Trash2, ScanLine, Download, ArrowLeft, ImagePlus, LogIn, LogOut, Shirt, RotateCw, FlipHorizontal2, ZoomIn, Crop } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import type { ClothesItem, Shelf } from '@shared/schema';
@@ -106,9 +106,14 @@ export default function Clothes() {
   
   const [zoomLevel, setZoomLevel] = useState(1);
   const [rotation, setRotation] = useState(0);
+  const [previewRotation, setPreviewRotation] = useState(0);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [maxZoom, setMaxZoom] = useState(1);
+  const [cropMode, setCropMode] = useState(false);
+  const [cropArea, setCropArea] = useState({ x: 10, y: 10, width: 80, height: 80 });
+  const cropContainerRef = useRef<HTMLDivElement>(null);
+  const previewImgRef = useRef<HTMLImageElement>(null);
   
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   
@@ -261,7 +266,10 @@ export default function Clothes() {
     setActivePhotoIndex(photoIndex);
     setZoomLevel(1);
     setRotation(0);
+    setPreviewRotation(0);
     setCapturedImage(null);
+    setCropMode(false);
+    setCropArea({ x: 10, y: 10, width: 80, height: 80 });
     setCameraOpen(true);
   };
   
@@ -339,31 +347,51 @@ export default function Clothes() {
   const capturePreview = () => {
     if (!videoRef.current) return;
     
-    const canvas = document.createElement('canvas');
     const video = videoRef.current;
-    
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = video.videoWidth;
+    tempCanvas.height = video.videoHeight;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return;
     
     if (zoomLevel > 1 && !('zoom' in (streamRef.current?.getVideoTracks()[0]?.getCapabilities?.() || {}))) {
       const zoomedWidth = video.videoWidth / zoomLevel;
       const zoomedHeight = video.videoHeight / zoomLevel;
       const startX = (video.videoWidth - zoomedWidth) / 2;
       const startY = (video.videoHeight - zoomedHeight) / 2;
-      ctx.drawImage(video, startX, startY, zoomedWidth, zoomedHeight, 0, 0, canvas.width, canvas.height);
+      tempCtx.drawImage(video, startX, startY, zoomedWidth, zoomedHeight, 0, 0, tempCanvas.width, tempCanvas.height);
     } else {
-      ctx.drawImage(video, 0, 0);
+      tempCtx.drawImage(video, 0, 0);
     }
     
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    const finalCanvas = document.createElement('canvas');
+    const finalCtx = finalCanvas.getContext('2d');
+    if (!finalCtx) return;
+    
+    if (previewRotation === 90 || previewRotation === 270) {
+      finalCanvas.width = tempCanvas.height;
+      finalCanvas.height = tempCanvas.width;
+    } else {
+      finalCanvas.width = tempCanvas.width;
+      finalCanvas.height = tempCanvas.height;
+    }
+    
+    finalCtx.translate(finalCanvas.width / 2, finalCanvas.height / 2);
+    finalCtx.rotate((previewRotation * Math.PI) / 180);
+    finalCtx.drawImage(tempCanvas, -tempCanvas.width / 2, -tempCanvas.height / 2);
+    
+    const dataUrl = finalCanvas.toDataURL('image/jpeg', 0.9);
     setCapturedImage(dataUrl);
+    setRotation(0);
     
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
+  };
+  
+  const rotatePreview = () => {
+    setPreviewRotation((prev) => (prev + 90) % 360);
   };
   
   const rotatePhoto = () => {
@@ -375,23 +403,75 @@ export default function Clothes() {
     
     const img = new Image();
     img.onload = async () => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+      let sourceCanvas = document.createElement('canvas');
+      let sourceCtx = sourceCanvas.getContext('2d');
+      if (!sourceCtx) return;
       
-      if (rotation === 90 || rotation === 270) {
-        canvas.width = img.height;
-        canvas.height = img.width;
+      if (cropMode && previewImgRef.current) {
+        const imgEl = previewImgRef.current;
+        const renderedW = imgEl.clientWidth;
+        const renderedH = imgEl.clientHeight;
+        const naturalW = img.width;
+        const naturalH = img.height;
+        
+        const renderedAspect = renderedW / renderedH;
+        const naturalAspect = naturalW / naturalH;
+        
+        let scale: number;
+        let offsetX: number;
+        let offsetY: number;
+        
+        if (naturalAspect > renderedAspect) {
+          scale = naturalH / renderedH;
+          const scaledNaturalW = naturalW / scale;
+          offsetX = ((scaledNaturalW - renderedW) / 2) * scale;
+          offsetY = 0;
+        } else {
+          scale = naturalW / renderedW;
+          const scaledNaturalH = naturalH / scale;
+          offsetY = ((scaledNaturalH - renderedH) / 2) * scale;
+          offsetX = 0;
+        }
+        
+        const visibleNaturalW = renderedW * scale;
+        const visibleNaturalH = renderedH * scale;
+        
+        const cropX = offsetX + (cropArea.x / 100) * visibleNaturalW;
+        const cropY = offsetY + (cropArea.y / 100) * visibleNaturalH;
+        const cropW = (cropArea.width / 100) * visibleNaturalW;
+        const cropH = (cropArea.height / 100) * visibleNaturalH;
+        
+        const finalCropX = Math.max(0, Math.min(cropX, naturalW - 1));
+        const finalCropY = Math.max(0, Math.min(cropY, naturalH - 1));
+        const finalCropW = Math.max(1, Math.min(cropW, naturalW - finalCropX));
+        const finalCropH = Math.max(1, Math.min(cropH, naturalH - finalCropY));
+        
+        sourceCanvas.width = Math.round(finalCropW);
+        sourceCanvas.height = Math.round(finalCropH);
+        sourceCtx.drawImage(img, finalCropX, finalCropY, finalCropW, finalCropH, 0, 0, sourceCanvas.width, sourceCanvas.height);
       } else {
-        canvas.width = img.width;
-        canvas.height = img.height;
+        sourceCanvas.width = img.width;
+        sourceCanvas.height = img.height;
+        sourceCtx.drawImage(img, 0, 0);
       }
       
-      ctx.translate(canvas.width / 2, canvas.height / 2);
-      ctx.rotate((rotation * Math.PI) / 180);
-      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+      const finalCanvas = document.createElement('canvas');
+      const finalCtx = finalCanvas.getContext('2d');
+      if (!finalCtx) return;
       
-      canvas.toBlob(async (blob) => {
+      if (rotation === 90 || rotation === 270) {
+        finalCanvas.width = sourceCanvas.height;
+        finalCanvas.height = sourceCanvas.width;
+      } else {
+        finalCanvas.width = sourceCanvas.width;
+        finalCanvas.height = sourceCanvas.height;
+      }
+      
+      finalCtx.translate(finalCanvas.width / 2, finalCanvas.height / 2);
+      finalCtx.rotate((rotation * Math.PI) / 180);
+      finalCtx.drawImage(sourceCanvas, -sourceCanvas.width / 2, -sourceCanvas.height / 2);
+      
+      finalCanvas.toBlob(async (blob) => {
         if (!blob) return;
         
         const file = new File([blob], `photo_${Date.now()}.jpg`, { type: 'image/jpeg' });
@@ -407,6 +487,8 @@ export default function Clothes() {
             if (activePhotoIndex < 7 && !photos[activePhotoIndex + 1]) {
               setCapturedImage(null);
               setRotation(0);
+              setCropMode(false);
+              setCropArea({ x: 10, y: 10, width: 80, height: 80 });
               setActivePhotoIndex(activePhotoIndex + 1);
               setTimeout(() => {
                 startCamera();
@@ -426,6 +508,8 @@ export default function Clothes() {
   const retakePhoto = () => {
     setCapturedImage(null);
     setRotation(0);
+    setCropMode(false);
+    setCropArea({ x: 10, y: 10, width: 80, height: 80 });
     setTimeout(() => {
       startCamera();
     }, 100);
@@ -442,7 +526,10 @@ export default function Clothes() {
     }
     setCapturedImage(null);
     setRotation(0);
+    setPreviewRotation(0);
     setZoomLevel(1);
+    setCropMode(false);
+    setCropArea({ x: 10, y: 10, width: 80, height: 80 });
     setCameraOpen(false);
   };
   
@@ -908,13 +995,128 @@ export default function Clothes() {
           </DialogHeader>
           <div className="space-y-3">
             {capturedImage ? (
-              <div className="relative">
+              <div 
+                ref={cropContainerRef}
+                className="relative"
+                style={{ transform: cropMode ? 'none' : `rotate(${rotation}deg)` }}
+              >
                 <img 
+                  ref={previewImgRef}
                   src={capturedImage} 
                   alt="Captured preview"
-                  className="w-full rounded bg-black aspect-video object-contain"
-                  style={{ transform: `rotate(${rotation}deg)` }}
+                  className="w-full rounded bg-black aspect-video object-cover"
                 />
+                {cropMode && (
+                  <>
+                    <div className="absolute inset-0 bg-black/50" />
+                    <div 
+                      className="absolute border-2 border-white bg-transparent overflow-hidden"
+                      style={{
+                        left: `${cropArea.x}%`,
+                        top: `${cropArea.y}%`,
+                        width: `${cropArea.width}%`,
+                        height: `${cropArea.height}%`,
+                        boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)',
+                      }}
+                    >
+                      <img 
+                        src={capturedImage}
+                        alt=""
+                        className="absolute object-cover"
+                        style={{
+                          width: `${100 / (cropArea.width / 100)}%`,
+                          height: `${100 / (cropArea.height / 100)}%`,
+                          left: `-${cropArea.x / cropArea.width * 100}%`,
+                          top: `-${cropArea.y / cropArea.height * 100}%`,
+                        }}
+                      />
+                      <div className="absolute -top-2 -left-2 w-5 h-5 bg-white rounded-full cursor-nw-resize touch-none"
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          (e.target as HTMLElement).setPointerCapture(e.pointerId);
+                          const startX = e.clientX;
+                          const startY = e.clientY;
+                          const startArea = { ...cropArea };
+                          const onMove = (ev: PointerEvent) => {
+                            const container = cropContainerRef.current;
+                            if (!container) return;
+                            const rect = container.getBoundingClientRect();
+                            const dx = ((ev.clientX - startX) / rect.width) * 100;
+                            const dy = ((ev.clientY - startY) / rect.height) * 100;
+                            const newX = Math.max(0, Math.min(startArea.x + dx, startArea.x + startArea.width - 15));
+                            const newY = Math.max(0, Math.min(startArea.y + dy, startArea.y + startArea.height - 15));
+                            setCropArea({
+                              x: newX,
+                              y: newY,
+                              width: startArea.width - (newX - startArea.x),
+                              height: startArea.height - (newY - startArea.y),
+                            });
+                          };
+                          const onUp = () => {
+                            window.removeEventListener('pointermove', onMove);
+                            window.removeEventListener('pointerup', onUp);
+                          };
+                          window.addEventListener('pointermove', onMove);
+                          window.addEventListener('pointerup', onUp);
+                        }}
+                      />
+                      <div className="absolute -bottom-2 -right-2 w-5 h-5 bg-white rounded-full cursor-se-resize touch-none"
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          (e.target as HTMLElement).setPointerCapture(e.pointerId);
+                          const startX = e.clientX;
+                          const startY = e.clientY;
+                          const startArea = { ...cropArea };
+                          const onMove = (ev: PointerEvent) => {
+                            const container = cropContainerRef.current;
+                            if (!container) return;
+                            const rect = container.getBoundingClientRect();
+                            const dx = ((ev.clientX - startX) / rect.width) * 100;
+                            const dy = ((ev.clientY - startY) / rect.height) * 100;
+                            setCropArea({
+                              ...startArea,
+                              width: Math.max(15, Math.min(100 - startArea.x, startArea.width + dx)),
+                              height: Math.max(15, Math.min(100 - startArea.y, startArea.height + dy)),
+                            });
+                          };
+                          const onUp = () => {
+                            window.removeEventListener('pointermove', onMove);
+                            window.removeEventListener('pointerup', onUp);
+                          };
+                          window.addEventListener('pointermove', onMove);
+                          window.addEventListener('pointerup', onUp);
+                        }}
+                      />
+                      <div className="absolute inset-0 cursor-move touch-none"
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          (e.target as HTMLElement).setPointerCapture(e.pointerId);
+                          const startX = e.clientX;
+                          const startY = e.clientY;
+                          const startArea = { ...cropArea };
+                          const onMove = (ev: PointerEvent) => {
+                            const container = cropContainerRef.current;
+                            if (!container) return;
+                            const rect = container.getBoundingClientRect();
+                            const dx = ((ev.clientX - startX) / rect.width) * 100;
+                            const dy = ((ev.clientY - startY) / rect.height) * 100;
+                            setCropArea({
+                              ...startArea,
+                              x: Math.max(0, Math.min(100 - startArea.width, startArea.x + dx)),
+                              y: Math.max(0, Math.min(100 - startArea.height, startArea.y + dy)),
+                            });
+                          };
+                          const onUp = () => {
+                            window.removeEventListener('pointermove', onMove);
+                            window.removeEventListener('pointerup', onUp);
+                          };
+                          window.addEventListener('pointermove', onMove);
+                          window.addEventListener('pointerup', onUp);
+                        }}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
               <div className="relative overflow-hidden rounded">
@@ -925,13 +1127,14 @@ export default function Clothes() {
                   muted
                   className="w-full bg-black aspect-video object-cover"
                   style={{ 
-                    transform: `${facingMode === 'user' ? 'scaleX(-1)' : ''} scale(${zoomLevel})`.trim(),
+                    transform: `${facingMode === 'user' ? 'scaleX(-1)' : ''} scale(${zoomLevel}) rotate(${previewRotation}deg)`.trim(),
                     transformOrigin: 'center center'
                   }}
                 />
-                {zoomLevel > 1 && (
-                  <div className="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
-                    {zoomLevel.toFixed(1)}x
+                {(zoomLevel > 1 || previewRotation > 0) && (
+                  <div className="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded flex gap-2">
+                    {zoomLevel > 1 && <span>{zoomLevel.toFixed(1)}x</span>}
+                    {previewRotation > 0 && <span>{previewRotation}°</span>}
                   </div>
                 )}
               </div>
@@ -958,6 +1161,9 @@ export default function Clothes() {
                     <Camera className="w-4 h-4 mr-2" />
                     Capture
                   </Button>
+                  <Button variant="outline" size="icon" onClick={rotatePreview} data-testid="button-rotate-preview">
+                    <RotateCw className="w-4 h-4" />
+                  </Button>
                   <Button variant="outline" size="icon" onClick={toggleCamera} data-testid="button-flip-camera">
                     <FlipHorizontal2 className="w-4 h-4" />
                   </Button>
@@ -970,11 +1176,31 @@ export default function Clothes() {
             
             {capturedImage && (
               <div className="space-y-2">
-                <div className="flex gap-2 justify-center">
-                  <Button variant="outline" size="icon" onClick={rotatePhoto} data-testid="button-rotate">
+                <div className="flex gap-2 justify-center items-center">
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    onClick={rotatePhoto} 
+                    disabled={cropMode}
+                    data-testid="button-rotate"
+                  >
                     <RotateCw className="w-4 h-4" />
                   </Button>
-                  <span className="text-xs text-muted-foreground self-center">{rotation}°</span>
+                  {!cropMode && <span className="text-xs text-muted-foreground">{rotation}°</span>}
+                  <Button 
+                    variant={cropMode ? "default" : "outline"} 
+                    size="icon" 
+                    onClick={() => {
+                      if (!cropMode) {
+                        setRotation(0);
+                      }
+                      setCropMode(!cropMode);
+                    }} 
+                    data-testid="button-crop"
+                  >
+                    <Crop className="w-4 h-4" />
+                  </Button>
+                  {cropMode && <span className="text-xs text-muted-foreground">Drag corners to crop</span>}
                 </div>
                 
                 <div className="flex gap-2">
