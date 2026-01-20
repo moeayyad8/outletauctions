@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'wouter';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
@@ -11,8 +11,9 @@ import { useToast } from '@/hooks/use-toast';
 import { useUpload } from '@/hooks/use-upload';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Package, Camera, X, Plus, Trash2, ScanLine, Download, ArrowLeft, ImagePlus, LogIn, LogOut, Shirt } from 'lucide-react';
+import { Package, Camera, X, Plus, Trash2, ScanLine, Download, ArrowLeft, ImagePlus, LogIn, LogOut, Shirt, RotateCw, FlipHorizontal2, ZoomIn } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Slider } from '@/components/ui/slider';
 import type { ClothesItem, Shelf } from '@shared/schema';
 
 interface ScanResult {
@@ -100,7 +101,14 @@ export default function Clothes() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [maxZoom, setMaxZoom] = useState(1);
   
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   
@@ -135,6 +143,12 @@ export default function Clothes() {
         title: result.lookupStatus === 'SUCCESS' ? 'Product Found' : 'Manual Entry Required',
         description: result.title,
       });
+      
+      if (!cameraOpen && photos.length === 0) {
+        setTimeout(() => {
+          openCamera(0);
+        }, 300);
+      }
     },
     onError: () => {
       toast({ title: 'Scan failed', variant: 'destructive' });
@@ -245,17 +259,41 @@ export default function Clothes() {
   
   const openCamera = (photoIndex: number) => {
     setActivePhotoIndex(photoIndex);
+    setZoomLevel(1);
+    setRotation(0);
+    setCapturedImage(null);
     setCameraOpen(true);
   };
   
-  const startCamera = async () => {
+  const startCamera = useCallback(async () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    
     try {
       console.log('Requesting camera access...');
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } 
+        video: { 
+          facingMode: facingMode, 
+          width: { ideal: 1920 }, 
+          height: { ideal: 1080 } 
+        } 
       });
-      console.log('Camera access granted');
+      console.log('Camera access granted, stream:', stream);
       streamRef.current = stream;
+      
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        const capabilities = videoTrack.getCapabilities?.();
+        if (capabilities && 'zoom' in capabilities) {
+          const zoomCaps = capabilities as any;
+          setMaxZoom(zoomCaps.zoom?.max || 1);
+        } else {
+          setMaxZoom(4);
+        }
+      }
+      
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
@@ -264,55 +302,137 @@ export default function Clothes() {
       toast({ title: 'Camera access denied', variant: 'destructive' });
       setCameraOpen(false);
     }
-  };
+  }, [facingMode, toast]);
   
   useEffect(() => {
-    if (cameraOpen) {
-      // Small delay to allow Dialog to mount the video element
+    if (cameraOpen && !capturedImage) {
       const timer = setTimeout(() => {
-        if (videoRef.current && !streamRef.current) {
+        if (videoRef.current) {
           startCamera();
         }
       }, 100);
       return () => clearTimeout(timer);
-    } else {
+    } else if (!cameraOpen) {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
       }
     }
-  }, [cameraOpen]);
+  }, [cameraOpen, facingMode, capturedImage, startCamera]);
   
-  const capturePhoto = async () => {
+  useEffect(() => {
+    if (streamRef.current && zoomLevel > 1) {
+      const videoTrack = streamRef.current.getVideoTracks()[0];
+      if (videoTrack) {
+        const capabilities = videoTrack.getCapabilities?.();
+        if (capabilities && 'zoom' in capabilities) {
+          try {
+            videoTrack.applyConstraints({ advanced: [{ zoom: zoomLevel } as any] });
+          } catch (e) {
+            console.log('Zoom not supported on this device');
+          }
+        }
+      }
+    }
+  }, [zoomLevel]);
+  
+  const capturePreview = () => {
     if (!videoRef.current) return;
     
     const canvas = document.createElement('canvas');
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
+    const video = videoRef.current;
+    
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
-    ctx.drawImage(videoRef.current, 0, 0);
+    if (zoomLevel > 1 && !('zoom' in (streamRef.current?.getVideoTracks()[0]?.getCapabilities?.() || {}))) {
+      const zoomedWidth = video.videoWidth / zoomLevel;
+      const zoomedHeight = video.videoHeight / zoomLevel;
+      const startX = (video.videoWidth - zoomedWidth) / 2;
+      const startY = (video.videoHeight - zoomedHeight) / 2;
+      ctx.drawImage(video, startX, startY, zoomedWidth, zoomedHeight, 0, 0, canvas.width, canvas.height);
+    } else {
+      ctx.drawImage(video, 0, 0);
+    }
     
-    canvas.toBlob(async (blob) => {
-      if (!blob) return;
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    setCapturedImage(dataUrl);
+    
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+  };
+  
+  const rotatePhoto = () => {
+    setRotation((prev) => (prev + 90) % 360);
+  };
+  
+  const savePhoto = async () => {
+    if (!capturedImage) return;
+    
+    const img = new Image();
+    img.onload = async () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
       
-      const file = new File([blob], `photo_${Date.now()}.jpg`, { type: 'image/jpeg' });
-      
-      try {
-        const result = await uploadFile(file);
-        if (result?.objectPath) {
-          const newPhotos = [...photos];
-          newPhotos[activePhotoIndex] = result.objectPath;
-          setPhotos(newPhotos);
-          toast({ title: `Photo ${activePhotoIndex + 1} captured` });
-        }
-      } catch (err) {
-        toast({ title: 'Failed to upload photo', variant: 'destructive' });
+      if (rotation === 90 || rotation === 270) {
+        canvas.width = img.height;
+        canvas.height = img.width;
+      } else {
+        canvas.width = img.width;
+        canvas.height = img.height;
       }
       
-      setCameraOpen(false);
-    }, 'image/jpeg', 0.9);
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((rotation * Math.PI) / 180);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+      
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        
+        const file = new File([blob], `photo_${Date.now()}.jpg`, { type: 'image/jpeg' });
+        
+        try {
+          const result = await uploadFile(file);
+          if (result?.objectPath) {
+            const newPhotos = [...photos];
+            newPhotos[activePhotoIndex] = result.objectPath;
+            setPhotos(newPhotos);
+            toast({ title: `Photo ${activePhotoIndex + 1} saved` });
+            
+            if (activePhotoIndex < 7 && !photos[activePhotoIndex + 1]) {
+              setCapturedImage(null);
+              setRotation(0);
+              setActivePhotoIndex(activePhotoIndex + 1);
+              setTimeout(() => {
+                startCamera();
+              }, 100);
+            } else {
+              setCameraOpen(false);
+            }
+          }
+        } catch (err) {
+          toast({ title: 'Failed to upload photo', variant: 'destructive' });
+        }
+      }, 'image/jpeg', 0.9);
+    };
+    img.src = capturedImage;
+  };
+  
+  const retakePhoto = () => {
+    setCapturedImage(null);
+    setRotation(0);
+    setTimeout(() => {
+      startCamera();
+    }, 100);
+  };
+  
+  const toggleCamera = () => {
+    setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
   };
   
   const closeCamera = () => {
@@ -320,6 +440,9 @@ export default function Clothes() {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
+    setCapturedImage(null);
+    setRotation(0);
+    setZoomLevel(1);
     setCameraOpen(false);
   };
   
@@ -776,27 +899,95 @@ export default function Clothes() {
       </main>
       
       <Dialog open={cameraOpen} onOpenChange={(open) => !open && closeCamera()}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md p-4">
           <DialogHeader>
-            <DialogTitle>Take Photo {activePhotoIndex + 1}</DialogTitle>
+            <DialogTitle className="flex items-center justify-between">
+              <span>Photo {activePhotoIndex + 1} of 8</span>
+              <Badge variant="outline">{photos.filter(Boolean).length} taken</Badge>
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full rounded bg-black aspect-video"
-            />
-            <div className="flex gap-2">
-              <Button onClick={capturePhoto} className="flex-1" disabled={isUploading} data-testid="button-capture">
-                <Camera className="w-4 h-4 mr-2" />
-                Capture
-              </Button>
-              <Button variant="outline" onClick={closeCamera} data-testid="button-cancel-camera">
-                Cancel
-              </Button>
-            </div>
+          <div className="space-y-3">
+            {capturedImage ? (
+              <div className="relative">
+                <img 
+                  src={capturedImage} 
+                  alt="Captured preview"
+                  className="w-full rounded bg-black aspect-video object-contain"
+                  style={{ transform: `rotate(${rotation}deg)` }}
+                />
+              </div>
+            ) : (
+              <div className="relative overflow-hidden rounded">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full bg-black aspect-video object-cover"
+                  style={{ 
+                    transform: `${facingMode === 'user' ? 'scaleX(-1)' : ''} scale(${zoomLevel})`.trim(),
+                    transformOrigin: 'center center'
+                  }}
+                />
+                {zoomLevel > 1 && (
+                  <div className="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
+                    {zoomLevel.toFixed(1)}x
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {!capturedImage && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <ZoomIn className="w-4 h-4 text-muted-foreground" />
+                  <Slider
+                    value={[zoomLevel]}
+                    onValueChange={([val]) => setZoomLevel(val)}
+                    min={1}
+                    max={maxZoom}
+                    step={0.1}
+                    className="flex-1"
+                    data-testid="slider-zoom"
+                  />
+                  <span className="text-xs text-muted-foreground w-8">{zoomLevel.toFixed(1)}x</span>
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button onClick={capturePreview} className="flex-1" data-testid="button-capture">
+                    <Camera className="w-4 h-4 mr-2" />
+                    Capture
+                  </Button>
+                  <Button variant="outline" size="icon" onClick={toggleCamera} data-testid="button-flip-camera">
+                    <FlipHorizontal2 className="w-4 h-4" />
+                  </Button>
+                  <Button variant="outline" onClick={closeCamera} data-testid="button-cancel-camera">
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+            
+            {capturedImage && (
+              <div className="space-y-2">
+                <div className="flex gap-2 justify-center">
+                  <Button variant="outline" size="icon" onClick={rotatePhoto} data-testid="button-rotate">
+                    <RotateCw className="w-4 h-4" />
+                  </Button>
+                  <span className="text-xs text-muted-foreground self-center">{rotation}°</span>
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button onClick={savePhoto} className="flex-1" disabled={isUploading} data-testid="button-save-photo">
+                    <Plus className="w-4 h-4 mr-2" />
+                    {isUploading ? 'Saving...' : 'Save & Next'}
+                  </Button>
+                  <Button variant="outline" onClick={retakePhoto} data-testid="button-retake">
+                    Retake
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
