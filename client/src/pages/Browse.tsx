@@ -118,7 +118,6 @@ export default function Browse() {
           </div>
         </div>
       </header>
-
       <main className="px-4 pt-4 space-y-4">
         <HeroSection />
 
@@ -211,11 +210,9 @@ export default function Browse() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold">Clothes Inventory</h2>
-                <p className="text-sm text-muted-foreground">{clothesItems.length} items for Depop</p>
+                <p className="text-sm text-muted-foreground">{clothesItems.length} items</p>
               </div>
-              <Badge variant="secondary" data-testid="badge-depop">
-                For Depop
-              </Badge>
+              <Badge variant="secondary" data-testid="badge-depop">Start Saving!</Badge>
             </div>
 
             {clothesLoading ? (
@@ -293,9 +290,7 @@ export default function Browse() {
           </>
         )}
       </main>
-
       <BottomNav />
-
       {selectedAuction && (
         <BidDialog
           open={bidDialogOpen}
