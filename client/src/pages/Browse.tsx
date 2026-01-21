@@ -50,7 +50,12 @@ export default function Browse() {
 
   const bidMutation = useMutation({
     mutationFn: async (data: { auctionId: number; amount: number; auctionTitle: string; auctionImage: string }) => {
-      return apiRequest('POST', '/api/bids', data);
+      const response = await apiRequest('POST', '/api/bids', data);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw errorData;
+      }
+      return response;
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['/api/bids'] });
@@ -61,12 +66,31 @@ export default function Browse() {
         description: `Your bid of $${variables.amount.toLocaleString()} has been placed.`,
       });
     },
-    onError: () => {
-      toast({
-        title: 'Failed to place bid',
-        description: 'Please try again.',
-        variant: 'destructive',
-      });
+    onError: (error: any) => {
+      if (error?.code === 'NO_PAYMENT_METHOD') {
+        toast({
+          title: 'Payment method required',
+          description: 'Please add a payment method in your profile before placing bids.',
+          variant: 'destructive',
+        });
+        setBidDialogOpen(false);
+        setTimeout(() => {
+          window.location.href = '/profile';
+        }, 1500);
+      } else if (error?.code === 'BIDDING_BLOCKED') {
+        toast({
+          title: 'Bidding blocked',
+          description: error.message || 'Your bidding privileges are currently blocked.',
+          variant: 'destructive',
+        });
+        setBidDialogOpen(false);
+      } else {
+        toast({
+          title: 'Failed to place bid',
+          description: error?.message || 'Please try again.',
+          variant: 'destructive',
+        });
+      }
     },
   });
 

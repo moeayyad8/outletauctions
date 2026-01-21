@@ -65,13 +65,40 @@ Preferred communication style: Simple, everyday language.
 
 2. **users**: User profile information
    - id (UUID), email, firstName, lastName, profileImageUrl
+   - Stripe payment fields: stripeCustomerId, stripePaymentMethodId, paymentMethodLast4, paymentMethodBrand
+   - Payment status: paymentStatus (none/active), biddingBlocked, biddingBlockedReason
    - createdAt, updatedAt timestamps
    - Supports upsert operations for seamless user synchronization
+
+3. **pendingCharges**: Tracks auction wins awaiting batch payment processing
+   - id (serial), userId, auctionId, amount, status (pending/processing/completed/failed)
+   - failureCount for retry logic, processed timestamp
+
+4. **paymentHistory**: Records of completed payment transactions
+   - id (serial), userId, amount, stripePaymentIntentId, status, description
 
 **Storage Pattern:**
 - Repository pattern with `IStorage` interface for data access abstraction
 - `DatabaseStorage` implementation for PostgreSQL operations
 - Support for user retrieval and upsert operations
+
+### Payment System
+
+**Stripe Integration:**
+- SetupIntent flow for collecting cards without immediate charge
+- Off-session charging for batch payment processing
+- Payment method attachment with customer default setting
+
+**Batch Payment Processing:**
+- Runs at 4 AM EST (9 AM UTC) via admin endpoint
+- Protected with x-admin-secret header (default: 'batch-4406-secret')
+- Aggregates pending charges per user into single transactions
+- Blocks bidding after 3 consecutive payment failures
+
+**Bidding Gate:**
+- POST /api/bids requires valid payment method
+- Error codes: NO_PAYMENT_METHOD, BIDDING_BLOCKED
+- Users redirected to Profile page to add payment method
 
 ### External Dependencies
 

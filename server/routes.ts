@@ -7,6 +7,7 @@ import { insertBidSchema, insertWatchlistSchema, insertAuctionSchema, insertTagS
 import { scanCode } from "./upcService";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { calculateRouting, getRoutingInputFromAuction } from "./routingService";
+import * as stripeService from "./stripeService";
 
 // Store connected WebSocket clients
 const wsClients = new Set<WebSocket>();
@@ -19,6 +20,103 @@ function broadcast(type: string, data: any) {
       client.send(message);
     }
   });
+}
+
+// Batch payment processing function (called daily at 4 AM EST)
+async function processBatchPayments(): Promise<{
+  processed: number;
+  failed: number;
+  totalAmount: number;
+  errors: string[];
+}> {
+  const result = {
+    processed: 0,
+    failed: 0,
+    totalAmount: 0,
+    errors: [] as string[],
+  };
+
+  if (!stripeService.isStripeConfigured()) {
+    result.errors.push('Stripe not configured');
+    return result;
+  }
+
+  // Get all users with pending charges
+  const usersWithCharges = await storage.getUsersWithPendingCharges();
+  
+  for (const user of usersWithCharges) {
+    if (!user.stripeCustomerId || !user.stripePaymentMethodId) {
+      // Block user from bidding if no payment method
+      await storage.updateUserStripeInfo(user.id, {
+        biddingBlocked: 1,
+        biddingBlockedReason: 'No payment method on file',
+        paymentStatus: 'blocked',
+      });
+      result.errors.push(`User ${user.id}: No payment method on file`);
+      continue;
+    }
+
+    // Get all pending charges for this user
+    const charges = await storage.getUserPendingCharges(user.id);
+    if (charges.length === 0) continue;
+
+    // Calculate total
+    const totalAmount = charges.reduce((sum, c) => sum + c.amount + (c.shippingAmount || 0), 0);
+    
+    // Attempt to charge
+    try {
+      const chargeResult = await stripeService.chargeCustomer(
+        user.stripeCustomerId,
+        user.stripePaymentMethodId,
+        totalAmount,
+        `Outlet Auctions - ${charges.length} item(s)`,
+        { userId: user.id, chargeCount: String(charges.length) }
+      );
+
+      if (chargeResult.success) {
+        // Mark all charges as processed
+        for (const charge of charges) {
+          await storage.updatePendingChargeStatus(charge.id, 'processed');
+        }
+        
+        // Create payment history record
+        await storage.createPaymentHistory({
+          userId: user.id,
+          stripePaymentIntentId: chargeResult.paymentIntentId,
+          amount: totalAmount,
+          itemCount: charges.length,
+          status: 'succeeded',
+          chargeIds: charges.map(c => c.id),
+        });
+
+        result.processed += charges.length;
+        result.totalAmount += totalAmount;
+      } else {
+        // Payment failed
+        for (const charge of charges) {
+          await storage.updatePendingChargeStatus(charge.id, 'failed', chargeResult.error);
+        }
+
+        // Check if this is a retry - block bidding after too many failures
+        const anyChargeWithRetries = charges.find(c => (c.retryCount || 0) >= 2);
+        if (anyChargeWithRetries) {
+          await storage.updateUserStripeInfo(user.id, {
+            biddingBlocked: 1,
+            biddingBlockedReason: 'Payment failed multiple times - please update payment method',
+            paymentStatus: 'failed',
+          });
+        }
+
+        result.failed += charges.length;
+        result.errors.push(`User ${user.id}: ${chargeResult.error}`);
+      }
+    } catch (error: any) {
+      result.errors.push(`User ${user.id}: ${error.message}`);
+      result.failed += charges.length;
+    }
+  }
+
+  return result;
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -43,6 +141,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/bids', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      
+      // Check if user has valid payment method before allowing bid
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      if (user.biddingBlocked) {
+        return res.status(403).json({ 
+          message: user.biddingBlockedReason || "Bidding is currently blocked on your account",
+          code: "BIDDING_BLOCKED"
+        });
+      }
+      
+      if (!user.stripePaymentMethodId) {
+        return res.status(403).json({ 
+          message: "Please add a payment method before placing bids",
+          code: "NO_PAYMENT_METHOD"
+        });
+      }
+      
       const bidData = insertBidSchema.parse({ ...req.body, userId });
       const bid = await storage.createBid(bidData);
       res.json(bid);
@@ -905,6 +1024,186 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error exporting clothes to CSV:", error);
       res.status(500).json({ message: "Failed to export clothes" });
+    }
+  });
+
+  // ============== STRIPE PAYMENT ROUTES ==============
+
+  // Check if Stripe is configured
+  app.get('/api/stripe/status', (req, res) => {
+    res.json({ configured: stripeService.isStripeConfigured() });
+  });
+
+  // Get current user's payment status
+  app.get('/api/payment/status', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      res.json({
+        hasPaymentMethod: !!user.stripePaymentMethodId,
+        paymentMethodLast4: user.paymentMethodLast4,
+        paymentMethodBrand: user.paymentMethodBrand,
+        paymentStatus: user.paymentStatus,
+        biddingBlocked: !!user.biddingBlocked,
+        biddingBlockedReason: user.biddingBlockedReason,
+      });
+    } catch (error) {
+      console.error("Error fetching payment status:", error);
+      res.status(500).json({ message: "Failed to fetch payment status" });
+    }
+  });
+
+  // Create SetupIntent to collect payment method
+  app.post('/api/stripe/setup-intent', isAuthenticated, async (req: any, res) => {
+    try {
+      if (!stripeService.isStripeConfigured()) {
+        return res.status(503).json({ message: "Payment system not configured" });
+      }
+
+      const userId = req.user.claims.sub;
+      const userEmail = req.user.claims.email;
+      const userName = `${req.user.claims.first_name || ''} ${req.user.claims.last_name || ''}`.trim();
+      
+      let user = await storage.getUser(userId);
+      
+      // Create Stripe customer if not exists
+      let stripeCustomerId = user?.stripeCustomerId;
+      if (!stripeCustomerId) {
+        const result = await stripeService.createCustomer(userEmail, userName);
+        stripeCustomerId = result.customerId;
+        
+        // Update user with Stripe customer ID
+        await storage.updateUserStripeInfo(userId, { stripeCustomerId });
+      }
+      
+      const setupIntent = await stripeService.createSetupIntent(stripeCustomerId);
+      
+      res.json({
+        clientSecret: setupIntent.clientSecret,
+        publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
+      });
+    } catch (error) {
+      console.error("Error creating setup intent:", error);
+      res.status(500).json({ message: "Failed to create payment setup" });
+    }
+  });
+
+  // Confirm payment method was saved
+  app.post('/api/stripe/confirm-setup', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { paymentMethodId } = req.body;
+      
+      if (!paymentMethodId) {
+        return res.status(400).json({ message: "Payment method ID required" });
+      }
+      
+      const user = await storage.getUser(userId);
+      if (!user?.stripeCustomerId) {
+        return res.status(400).json({ message: "User not set up for payments" });
+      }
+
+      // Attach payment method to customer and set as default
+      await stripeService.attachPaymentMethodToCustomer(paymentMethodId, user.stripeCustomerId);
+
+      // Get payment method info
+      const pmInfo = await stripeService.getPaymentMethodInfo(paymentMethodId);
+      
+      // Update user with payment method info
+      await storage.updateUserStripeInfo(userId, {
+        stripePaymentMethodId: pmInfo.paymentMethodId,
+        paymentMethodLast4: pmInfo.last4,
+        paymentMethodBrand: pmInfo.brand,
+        paymentStatus: 'active',
+        biddingBlocked: 0,
+        biddingBlockedReason: null,
+      });
+      
+      res.json({ 
+        success: true,
+        last4: pmInfo.last4,
+        brand: pmInfo.brand,
+      });
+    } catch (error) {
+      console.error("Error confirming setup:", error);
+      res.status(500).json({ message: "Failed to confirm payment setup" });
+    }
+  });
+
+  // Remove payment method
+  app.delete('/api/stripe/payment-method', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user?.stripePaymentMethodId) {
+        return res.status(400).json({ message: "No payment method to remove" });
+      }
+      
+      await stripeService.detachPaymentMethod(user.stripePaymentMethodId);
+      
+      await storage.updateUserStripeInfo(userId, {
+        stripePaymentMethodId: null,
+        paymentMethodLast4: null,
+        paymentMethodBrand: null,
+        paymentStatus: 'none',
+        biddingBlocked: 1,
+        biddingBlockedReason: 'No payment method on file',
+      });
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing payment method:", error);
+      res.status(500).json({ message: "Failed to remove payment method" });
+    }
+  });
+
+  // Get user's pending charges
+  app.get('/api/payment/pending-charges', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const charges = await storage.getUserPendingCharges(userId);
+      res.json(charges);
+    } catch (error) {
+      console.error("Error fetching pending charges:", error);
+      res.status(500).json({ message: "Failed to fetch pending charges" });
+    }
+  });
+
+  // Get user's payment history
+  app.get('/api/payment/history', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const history = await storage.getUserPaymentHistory(userId);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching payment history:", error);
+      res.status(500).json({ message: "Failed to fetch payment history" });
+    }
+  });
+
+  // Admin: Process batch payments (protected with admin secret)
+  // In production, this would be called by a cron service with the admin secret
+  app.post('/api/admin/process-batch-payments', async (req, res) => {
+    try {
+      // Verify admin authorization via secret header
+      const adminSecret = req.headers['x-admin-secret'];
+      const expectedSecret = process.env.ADMIN_BATCH_SECRET || 'batch-4406-secret';
+      
+      if (adminSecret !== expectedSecret) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const result = await processBatchPayments();
+      res.json(result);
+    } catch (error) {
+      console.error("Error processing batch payments:", error);
+      res.status(500).json({ message: "Failed to process batch payments" });
     }
   });
 

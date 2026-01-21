@@ -1,6 +1,7 @@
 import { BottomNav } from '@/components/BottomNav';
 import { Card } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { PaymentSetup } from '@/components/PaymentSetup';
 import { Settings, User, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
@@ -121,6 +122,10 @@ export default function Profile() {
             </div>
           )}
         </div>
+
+        {isAuthenticated && (
+          <PaymentSetup />
+        )}
 
         <Card
           className="p-4 hover-elevate active-elevate-2 cursor-pointer"

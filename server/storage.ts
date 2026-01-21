@@ -1,4 +1,4 @@
-import { users, bids, watchlist, auctions, tags, auctionTags, shelves, routingConfig, brandRoutingStats, clothesInventory, type User, type UpsertUser, type Bid, type InsertBid, type Watchlist, type InsertWatchlist, type Auction, type InsertAuction, type Tag, type InsertTag, type AuctionTag, type Shelf, type InsertShelf, type RoutingConfig, type BrandRoutingStat, type ClothesItem, type InsertClothes } from "@shared/schema";
+import { users, bids, watchlist, auctions, tags, auctionTags, shelves, routingConfig, brandRoutingStats, clothesInventory, pendingCharges, paymentHistory, type User, type UpsertUser, type Bid, type InsertBid, type Watchlist, type InsertWatchlist, type Auction, type InsertAuction, type Tag, type InsertTag, type AuctionTag, type Shelf, type InsertShelf, type RoutingConfig, type BrandRoutingStat, type ClothesItem, type InsertClothes, type PendingCharge, type InsertPendingCharge, type PaymentHistory, type InsertPaymentHistory } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, like, inArray, sql } from "drizzle-orm";
 
@@ -55,6 +55,26 @@ export interface IStorage {
   deleteClothesItem(id: number): Promise<void>;
   getNextClothesSku(): Promise<string>;
   markClothesExported(ids: number[]): Promise<void>;
+  // Payment methods
+  updateUserStripeInfo(userId: string, data: {
+    stripeCustomerId?: string;
+    stripePaymentMethodId?: string | null;
+    paymentMethodLast4?: string | null;
+    paymentMethodBrand?: string | null;
+    paymentStatus?: string;
+    biddingBlocked?: number;
+    biddingBlockedReason?: string | null;
+  }): Promise<User | undefined>;
+  // Pending charges
+  createPendingCharge(charge: InsertPendingCharge): Promise<PendingCharge>;
+  getUserPendingCharges(userId: string): Promise<PendingCharge[]>;
+  getAllPendingCharges(): Promise<PendingCharge[]>;
+  updatePendingChargeStatus(id: number, status: string, failureReason?: string): Promise<PendingCharge | undefined>;
+  // Payment history
+  createPaymentHistory(payment: InsertPaymentHistory): Promise<PaymentHistory>;
+  getUserPaymentHistory(userId: string): Promise<PaymentHistory[]>;
+  // User queries for batch processing
+  getUsersWithPendingCharges(): Promise<User[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -412,6 +432,81 @@ export class DatabaseStorage implements IStorage {
     await db.update(clothesInventory)
       .set({ lastExportedAt: new Date() })
       .where(inArray(clothesInventory.id, ids));
+  }
+
+  // Payment methods
+  async updateUserStripeInfo(userId: string, data: {
+    stripeCustomerId?: string;
+    stripePaymentMethodId?: string | null;
+    paymentMethodLast4?: string | null;
+    paymentMethodBrand?: string | null;
+    paymentStatus?: string;
+    biddingBlocked?: number;
+    biddingBlockedReason?: string | null;
+  }): Promise<User | undefined> {
+    const [updated] = await db.update(users)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  // Pending charges
+  async createPendingCharge(charge: InsertPendingCharge): Promise<PendingCharge> {
+    const [newCharge] = await db.insert(pendingCharges).values(charge).returning();
+    return newCharge;
+  }
+
+  async getUserPendingCharges(userId: string): Promise<PendingCharge[]> {
+    return db.select().from(pendingCharges)
+      .where(and(
+        eq(pendingCharges.userId, userId),
+        eq(pendingCharges.status, 'pending')
+      ))
+      .orderBy(desc(pendingCharges.createdAt));
+  }
+
+  async getAllPendingCharges(): Promise<PendingCharge[]> {
+    return db.select().from(pendingCharges)
+      .where(eq(pendingCharges.status, 'pending'))
+      .orderBy(pendingCharges.createdAt);
+  }
+
+  async updatePendingChargeStatus(id: number, status: string, failureReason?: string): Promise<PendingCharge | undefined> {
+    const [updated] = await db.update(pendingCharges)
+      .set({ 
+        status, 
+        failureReason: failureReason || null,
+        processedAt: status === 'processed' ? new Date() : null,
+        retryCount: status === 'failed' ? sql`${pendingCharges.retryCount} + 1` : pendingCharges.retryCount,
+      })
+      .where(eq(pendingCharges.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Payment history
+  async createPaymentHistory(payment: InsertPaymentHistory): Promise<PaymentHistory> {
+    const [newPayment] = await db.insert(paymentHistory).values(payment).returning();
+    return newPayment;
+  }
+
+  async getUserPaymentHistory(userId: string): Promise<PaymentHistory[]> {
+    return db.select().from(paymentHistory)
+      .where(eq(paymentHistory.userId, userId))
+      .orderBy(desc(paymentHistory.createdAt));
+  }
+
+  // User queries for batch processing
+  async getUsersWithPendingCharges(): Promise<User[]> {
+    const userIds = await db.selectDistinct({ userId: pendingCharges.userId })
+      .from(pendingCharges)
+      .where(eq(pendingCharges.status, 'pending'));
+    
+    if (userIds.length === 0) return [];
+    
+    return db.select().from(users)
+      .where(inArray(users.id, userIds.map(u => u.userId)));
   }
 }
 

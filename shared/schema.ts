@@ -30,6 +30,13 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
+  stripeCustomerId: varchar("stripe_customer_id"),
+  stripePaymentMethodId: varchar("stripe_payment_method_id"),
+  paymentMethodLast4: varchar("payment_method_last4", { length: 4 }),
+  paymentMethodBrand: varchar("payment_method_brand", { length: 20 }),
+  paymentStatus: varchar("payment_status", { length: 20 }).default("none"),
+  biddingBlocked: integer("bidding_blocked").default(0),
+  biddingBlockedReason: varchar("bidding_blocked_reason", { length: 200 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -283,3 +290,63 @@ export const DEPOP_COLORS = [
   "Black", "White", "Gray", "Red", "Pink", "Orange", "Yellow", 
   "Green", "Blue", "Purple", "Brown", "Cream", "Gold", "Silver", "Multi"
 ] as const;
+
+// Pending charges table - for daily batch processing
+export const pendingCharges = pgTable("pending_charges", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  auctionId: integer("auction_id"),
+  clothesItemId: integer("clothes_item_id"),
+  itemType: varchar("item_type", { length: 20 }).notNull(), // 'auction' or 'clothes'
+  itemTitle: varchar("item_title", { length: 500 }).notNull(),
+  itemImage: varchar("item_image", { length: 1000 }),
+  amount: integer("amount").notNull(), // In cents
+  shippingAmount: integer("shipping_amount").default(0), // In cents
+  status: varchar("status", { length: 20 }).notNull().default("pending"), // pending, processed, failed, refunded
+  failureReason: varchar("failure_reason", { length: 500 }),
+  retryCount: integer("retry_count").default(0),
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("IDX_pending_charges_status").on(table.status),
+  index("IDX_pending_charges_user").on(table.userId),
+]);
+
+export const insertPendingChargeSchema = createInsertSchema(pendingCharges).omit({
+  id: true,
+  processedAt: true,
+  createdAt: true,
+});
+export type InsertPendingCharge = z.infer<typeof insertPendingChargeSchema>;
+export type PendingCharge = typeof pendingCharges.$inferSelect;
+
+// Payment history table - completed transactions
+export const paymentHistory = pgTable("payment_history", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  stripePaymentIntentId: varchar("stripe_payment_intent_id"),
+  amount: integer("amount").notNull(), // Total in cents
+  itemCount: integer("item_count").notNull().default(1),
+  status: varchar("status", { length: 20 }).notNull(), // succeeded, failed, refunded
+  failureReason: varchar("failure_reason", { length: 500 }),
+  chargeIds: jsonb("charge_ids"), // Array of pending_charge IDs included
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("IDX_payment_history_user").on(table.userId),
+  index("IDX_payment_history_status").on(table.status),
+]);
+
+export const insertPaymentHistorySchema = createInsertSchema(paymentHistory).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertPaymentHistory = z.infer<typeof insertPaymentHistorySchema>;
+export type PaymentHistory = typeof paymentHistory.$inferSelect;
+
+// Payment status options
+export const PAYMENT_STATUS_OPTIONS = ["none", "active", "failed", "blocked"] as const;
+export type PaymentStatus = typeof PAYMENT_STATUS_OPTIONS[number];
+
+// Charge status options
+export const CHARGE_STATUS_OPTIONS = ["pending", "processed", "failed", "refunded"] as const;
+export type ChargeStatus = typeof CHARGE_STATUS_OPTIONS[number];
