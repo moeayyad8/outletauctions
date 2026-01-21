@@ -87,6 +87,11 @@ export default function Clothes() {
       return stored ? JSON.parse(stored) : null;
     } catch { return null; }
   });
+  // Use ref to avoid stale closure in mutation callbacks
+  const loggedInStaffRef = useRef(loggedInStaff);
+  useEffect(() => {
+    loggedInStaffRef.current = loggedInStaff;
+  }, [loggedInStaff]);
   const [showStaffLoginDialog, setShowStaffLoginDialog] = useState(false);
   const [staffPinInput, setStaffPinInput] = useState('');
   
@@ -211,10 +216,10 @@ export default function Clothes() {
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
-      // Include staff ID for tracking
+      // Include staff ID for tracking (use ref to avoid stale closure)
       const enrichedData = {
         ...data,
-        scannedByStaffId: loggedInStaff?.id || null,
+        scannedByStaffId: loggedInStaffRef.current?.id || null,
       };
       const res = await apiRequest('POST', '/api/clothes', enrichedData);
       return res.json();
@@ -683,32 +688,48 @@ export default function Clothes() {
             </Button>
           </div>
         </div>
-        <div className="flex items-center justify-end mt-2">
-          {loggedInStaff ? (
+        {/* Staff Status Banner */}
+        {loggedInStaff ? (
+          <div className="flex items-center justify-between bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700 rounded-lg px-3 py-2 mt-2" data-testid="staff-status-banner">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              <span className="font-medium text-green-800 dark:text-green-200">
+                Welcome, {loggedInStaff.name}!
+              </span>
+              <span className="text-sm text-green-600 dark:text-green-400">
+                Your scans are being tracked
+              </span>
+            </div>
             <Button 
               variant="outline" 
               size="sm"
               onClick={handleStaffLogout}
-              className="h-7 text-xs"
+              className="bg-white dark:bg-background border-green-400"
               data-testid="button-staff-logout"
             >
-              <User className="w-3 h-3 mr-1" />
-              {loggedInStaff.name}
-              <LogOut className="w-3 h-3 ml-1" />
+              <LogOut className="w-4 h-4 mr-1" />
+              Clock Out
             </Button>
-          ) : (
+          </div>
+        ) : (
+          <div className="flex items-center justify-between bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 rounded-lg px-3 py-2 mt-2" data-testid="staff-clock-in-prompt">
+            <div className="flex items-center gap-2">
+              <User className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <span className="text-amber-800 dark:text-amber-200">
+                Clock in to track your scans
+              </span>
+            </div>
             <Button 
-              variant="outline" 
+              variant="default"
               size="sm"
               onClick={() => setShowStaffLoginDialog(true)}
-              className="h-7 text-xs"
               data-testid="button-staff-login-pin"
             >
-              <User className="w-3 h-3 mr-1" />
+              <User className="w-4 h-4 mr-1" />
               Clock In
             </Button>
-          )}
-        </div>
+          </div>
+        )}
       </header>
       
       <main className="p-3 pb-24 space-y-4">
