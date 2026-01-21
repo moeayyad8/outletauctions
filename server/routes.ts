@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { insertBidSchema, insertWatchlistSchema, insertAuctionSchema, insertTagSchema } from "@shared/schema";
+import { insertBidSchema, insertWatchlistSchema, insertAuctionSchema, insertTagSchema, insertStaffSchema, insertBatchSchema } from "@shared/schema";
 import { scanCode } from "./upcService";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { calculateRouting, getRoutingInputFromAuction } from "./routingService";
@@ -322,7 +322,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Note: brandTier, condition, and weightClass are optional for now
       // Items without these fields will default to eBay destination
       
-      const auction = await storage.createAuction(auctionData);
+      // Get active batch if no batchId provided
+      let batchId = auctionData.batchId;
+      if (!batchId) {
+        const activeBatch = await storage.getActiveBatch();
+        batchId = activeBatch?.id;
+      }
+      
+      // Create auction with batch and staff tracking
+      const auction = await storage.createAuction({
+        ...auctionData,
+        batchId,
+      });
+      
+      // Update batch stats if assigned to a batch
+      if (batchId) {
+        await storage.incrementBatchItems(batchId, auctionData.cost || 200);
+      }
+      
+      // Increment staff shift scans if staff is tracking
+      if (auctionData.scannedByStaffId) {
+        const activeShift = await storage.getActiveShift(auctionData.scannedByStaffId);
+        if (activeShift) {
+          await storage.incrementShiftScans(activeShift.id);
+        }
+      }
       
       // Calculate routing for the new auction
       const config = await storage.getRoutingConfig();
@@ -906,7 +930,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create a new clothes item
   app.post('/api/clothes', async (req, res) => {
     try {
-      const item = await storage.createClothesItem(req.body);
+      // Auto-assign active batch and track staff
+      const activeBatch = await storage.getActiveBatch();
+      const itemData = {
+        ...req.body,
+        batchId: req.body.batchId || activeBatch?.id || null,
+        scannedByStaffId: req.body.scannedByStaffId || null,
+        cost: req.body.cost || 200, // Default $2 cost
+      };
+      
+      const item = await storage.createClothesItem(itemData);
+      
+      // Update batch totalItems count
+      if (item.batchId) {
+        await storage.incrementBatchItemCount(item.batchId);
+      }
+      
+      // Update staff shift scan count
+      if (item.scannedByStaffId) {
+        const activeShift = await storage.getActiveShift(item.scannedByStaffId);
+        if (activeShift) {
+          await storage.incrementShiftScanCount(activeShift.id);
+        }
+      }
+      
       res.json(item);
     } catch (error) {
       console.error("Error creating clothes item:", error);
@@ -1204,6 +1251,328 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error processing batch payments:", error);
       res.status(500).json({ message: "Failed to process batch payments" });
+    }
+  });
+
+  // ============ ADMIN AUTHENTICATION ============
+  
+  // Admin secret for protected routes (4406)
+  const ADMIN_SECRET = '4406';
+  
+  // Middleware to check admin authentication via x-admin-secret header
+  const requireAdminAuth = (req: any, res: any, next: any) => {
+    const adminSecret = req.headers['x-admin-secret'];
+    if (adminSecret !== ADMIN_SECRET) {
+      return res.status(401).json({ message: 'Admin authentication required', code: 'ADMIN_AUTH_REQUIRED' });
+    }
+    next();
+  };
+
+  // ============ STAFF MANAGEMENT ROUTES ============
+  
+  // Get all staff (admin only)
+  app.get('/api/staff', requireAdminAuth, async (req, res) => {
+    try {
+      const allStaff = await storage.getAllStaff();
+      res.json(allStaff);
+    } catch (error) {
+      console.error("Error fetching staff:", error);
+      res.status(500).json({ message: "Failed to fetch staff" });
+    }
+  });
+
+  // Get active staff only (public - for dropdown selections)
+  app.get('/api/staff/active', async (req, res) => {
+    try {
+      const activeStaff = await storage.getActiveStaff();
+      res.json(activeStaff);
+    } catch (error) {
+      console.error("Error fetching active staff:", error);
+      res.status(500).json({ message: "Failed to fetch active staff" });
+    }
+  });
+
+  // Staff login by PIN (checks active status)
+  app.post('/api/staff/login', async (req, res) => {
+    try {
+      const { pin } = req.body;
+      if (!pin || pin.length !== 4) {
+        return res.status(400).json({ message: "Invalid PIN format" });
+      }
+      const staffMember = await storage.getStaffByPin(pin);
+      if (!staffMember) {
+        return res.status(401).json({ message: "Invalid PIN" });
+      }
+      
+      // Check if staff member is active
+      if (!staffMember.active) {
+        return res.status(401).json({ message: "Staff account is inactive" });
+      }
+      
+      // Check for active shift, create one if none
+      let activeShift = await storage.getActiveShift(staffMember.id);
+      if (!activeShift) {
+        activeShift = await storage.clockIn(staffMember.id);
+      }
+      
+      res.json({ staff: staffMember, shift: activeShift });
+    } catch (error) {
+      console.error("Error logging in staff:", error);
+      res.status(500).json({ message: "Failed to login" });
+    }
+  });
+
+  // Create new staff member (admin only)
+  app.post('/api/staff', requireAdminAuth, async (req, res) => {
+    try {
+      const staffData = insertStaffSchema.parse(req.body);
+      const newStaff = await storage.createStaff(staffData);
+      res.json(newStaff);
+    } catch (error) {
+      console.error("Error creating staff:", error);
+      res.status(400).json({ message: "Failed to create staff member" });
+    }
+  });
+
+  // Update staff member (admin only)
+  app.patch('/api/staff/:id', requireAdminAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updated = await storage.updateStaff(id, req.body);
+      if (!updated) {
+        return res.status(404).json({ message: "Staff member not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating staff:", error);
+      res.status(400).json({ message: "Failed to update staff member" });
+    }
+  });
+
+  // Deactivate staff member (admin only)
+  app.delete('/api/staff/:id', requireAdminAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deactivated = await storage.deactivateStaff(id);
+      if (!deactivated) {
+        return res.status(404).json({ message: "Staff member not found" });
+      }
+      res.json(deactivated);
+    } catch (error) {
+      console.error("Error deactivating staff:", error);
+      res.status(500).json({ message: "Failed to deactivate staff member" });
+    }
+  });
+
+  // ============ SHIFT ROUTES ============
+
+  // Clock out (staff can clock themselves out)
+  app.post('/api/shifts/:id/clockout', async (req, res) => {
+    try {
+      const shiftId = parseInt(req.params.id);
+      const shift = await storage.clockOut(shiftId);
+      if (!shift) {
+        return res.status(404).json({ message: "Shift not found" });
+      }
+      res.json(shift);
+    } catch (error) {
+      console.error("Error clocking out:", error);
+      res.status(500).json({ message: "Failed to clock out" });
+    }
+  });
+
+  // Get staff shifts (admin only)
+  app.get('/api/staff/:id/shifts', requireAdminAuth, async (req, res) => {
+    try {
+      const staffId = parseInt(req.params.id);
+      const shifts = await storage.getStaffShifts(staffId);
+      res.json(shifts);
+    } catch (error) {
+      console.error("Error fetching shifts:", error);
+      res.status(500).json({ message: "Failed to fetch shifts" });
+    }
+  });
+
+  // ============ BATCH ROUTES ============
+
+  // Get all batches (admin only)
+  app.get('/api/batches', requireAdminAuth, async (req, res) => {
+    try {
+      const allBatches = await storage.getAllBatches();
+      res.json(allBatches);
+    } catch (error) {
+      console.error("Error fetching batches:", error);
+      res.status(500).json({ message: "Failed to fetch batches" });
+    }
+  });
+
+  // Get active batch (public - needed for scan assignment)
+  app.get('/api/batches/active', async (req, res) => {
+    try {
+      const activeBatch = await storage.getActiveBatch();
+      res.json(activeBatch || null);
+    } catch (error) {
+      console.error("Error fetching active batch:", error);
+      res.status(500).json({ message: "Failed to fetch active batch" });
+    }
+  });
+
+  // Create new batch (admin only)
+  app.post('/api/batches', requireAdminAuth, async (req, res) => {
+    try {
+      const batchData = insertBatchSchema.parse(req.body);
+      const newBatch = await storage.createBatch(batchData);
+      res.json(newBatch);
+    } catch (error) {
+      console.error("Error creating batch:", error);
+      res.status(400).json({ message: "Failed to create batch" });
+    }
+  });
+
+  // Update batch (admin only)
+  app.patch('/api/batches/:id', requireAdminAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updated = await storage.updateBatch(id, req.body);
+      if (!updated) {
+        return res.status(404).json({ message: "Batch not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating batch:", error);
+      res.status(400).json({ message: "Failed to update batch" });
+    }
+  });
+
+  // ============ ANALYTICS ROUTES (Admin only) ============
+
+  // Get staff performance stats
+  app.get('/api/analytics/staff', requireAdminAuth, async (req, res) => {
+    try {
+      const allStaff = await storage.getActiveStaff();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const stats = await Promise.all(allStaff.map(async (s) => {
+        const todayStats = await storage.getStaffScanStats(s.id, today);
+        const allTimeStats = await storage.getStaffScanStats(s.id);
+        const activeShift = await storage.getActiveShift(s.id);
+        
+        return {
+          id: s.id,
+          name: s.name,
+          dailyGoal: s.dailyScanGoal || 50,
+          todayScans: todayStats.totalScans,
+          todayHours: Math.round(todayStats.totalHours * 10) / 10,
+          allTimeScans: allTimeStats.totalScans,
+          allTimeHours: Math.round(allTimeStats.totalHours * 10) / 10,
+          itemsPerHour: allTimeStats.totalHours > 0 ? Math.round(allTimeStats.totalScans / allTimeStats.totalHours) : 0,
+          isClockIn: !!activeShift,
+        };
+      }));
+      
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching staff analytics:", error);
+      res.status(500).json({ message: "Failed to fetch staff analytics" });
+    }
+  });
+
+  // Get batch sell-through stats
+  app.get('/api/analytics/batches', requireAdminAuth, async (req, res) => {
+    try {
+      const stats = await storage.getBatchStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching batch analytics:", error);
+      res.status(500).json({ message: "Failed to fetch batch analytics" });
+    }
+  });
+
+  // Get inventory aging report
+  app.get('/api/analytics/aging', requireAdminAuth, async (req, res) => {
+    try {
+      const aging = await storage.getInventoryAging();
+      res.json(aging);
+    } catch (error) {
+      console.error("Error fetching inventory aging:", error);
+      res.status(500).json({ message: "Failed to fetch inventory aging" });
+    }
+  });
+
+  // Get category performance
+  app.get('/api/analytics/categories', requireAdminAuth, async (req, res) => {
+    try {
+      const performance = await storage.getCategoryPerformance();
+      res.json(performance);
+    } catch (error) {
+      console.error("Error fetching category performance:", error);
+      res.status(500).json({ message: "Failed to fetch category performance" });
+    }
+  });
+
+  // Get financial summary
+  app.get('/api/analytics/financial', requireAdminAuth, async (req, res) => {
+    try {
+      const batchStats = await storage.getBatchStats();
+      
+      const totalCost = batchStats.reduce((sum, b) => sum + (b.totalItems * 200), 0); // $2 default
+      const totalRevenue = batchStats.reduce((sum, b) => sum + (b.soldItems * 500), 0); // Placeholder
+      const totalProfit = totalRevenue - totalCost;
+      const overallRoi = totalCost > 0 ? Math.round((totalProfit / totalCost) * 100) : 0;
+      
+      res.json({
+        totalCost: totalCost / 100, // Convert to dollars
+        totalRevenue: totalRevenue / 100,
+        totalProfit: totalProfit / 100,
+        overallRoi,
+        batchCount: batchStats.length,
+        totalItems: batchStats.reduce((sum, b) => sum + b.totalItems, 0),
+        soldItems: batchStats.reduce((sum, b) => sum + b.soldItems, 0),
+      });
+    } catch (error) {
+      console.error("Error fetching financial analytics:", error);
+      res.status(500).json({ message: "Failed to fetch financial analytics" });
+    }
+  });
+
+  // ============ COST EDITING (Admin only) ============
+
+  // Update auction cost
+  app.patch('/api/auctions/:id/cost', requireAdminAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { cost } = req.body;
+      if (typeof cost !== 'number' || cost < 0) {
+        return res.status(400).json({ message: "Invalid cost value" });
+      }
+      const updated = await storage.updateAuctionCost(id, cost);
+      if (!updated) {
+        return res.status(404).json({ message: "Auction not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating auction cost:", error);
+      res.status(500).json({ message: "Failed to update cost" });
+    }
+  });
+
+  // Update clothes cost
+  app.patch('/api/clothes/:id/cost', requireAdminAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { cost } = req.body;
+      if (typeof cost !== 'number' || cost < 0) {
+        return res.status(400).json({ message: "Invalid cost value" });
+      }
+      const updated = await storage.updateClothesCost(id, cost);
+      if (!updated) {
+        return res.status(404).json({ message: "Clothes item not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating clothes cost:", error);
+      res.status(500).json({ message: "Failed to update cost" });
     }
   });
 

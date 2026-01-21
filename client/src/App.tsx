@@ -12,6 +12,7 @@ import Inventory from "@/pages/Inventory";
 import RetailValueFinder from "@/pages/RetailValueFinder";
 import LiveView from "@/pages/LiveView";
 import Clothes from "@/pages/Clothes";
+import AdminDashboard from "@/pages/AdminDashboard";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/value-finder" component={RetailValueFinder} />
       <Route path="/live" component={LiveView} />
       <Route path="/clothes" component={Clothes} />
+      <Route path="/admin" component={AdminDashboard} />
       <Route component={NotFound} />
     </Switch>
   );

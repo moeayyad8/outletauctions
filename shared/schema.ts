@@ -116,6 +116,11 @@ export const auctions = pgTable("auctions", {
   needsReview: integer("needs_review").notNull().default(0),
   lastExportedAt: timestamp("last_exported_at"),
   ebayStatus: varchar("ebay_status", { length: 20 }),
+  batchId: integer("batch_id"),
+  scannedByStaffId: integer("scanned_by_staff_id"),
+  cost: integer("cost").notNull().default(200), // In cents, default $2
+  soldAt: timestamp("sold_at"),
+  soldPrice: integer("sold_price"), // In cents
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -123,6 +128,8 @@ export const insertAuctionSchema = createInsertSchema(auctions).omit({
   id: true,
   currentBid: true,
   bidCount: true,
+  soldAt: true,
+  soldPrice: true,
   createdAt: true,
 });
 export type InsertAuction = z.infer<typeof insertAuctionSchema>;
@@ -257,12 +264,19 @@ export const clothesInventory = pgTable("clothes_inventory", {
   shelfId: integer("shelf_id"),
   status: varchar("status", { length: 20 }).notNull().default("draft"),
   lastExportedAt: timestamp("last_exported_at"),
+  batchId: integer("batch_id"),
+  scannedByStaffId: integer("scanned_by_staff_id"),
+  cost: integer("cost").notNull().default(200), // In cents, default $2
+  soldAt: timestamp("sold_at"),
+  soldPrice: integer("sold_price"), // In cents
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const insertClothesSchema = createInsertSchema(clothesInventory).omit({
   id: true,
   createdAt: true,
+  soldAt: true,
+  soldPrice: true,
 });
 export type InsertClothes = z.infer<typeof insertClothesSchema>;
 export type ClothesItem = typeof clothesInventory.$inferSelect;
@@ -350,3 +364,61 @@ export type PaymentStatus = typeof PAYMENT_STATUS_OPTIONS[number];
 // Charge status options
 export const CHARGE_STATUS_OPTIONS = ["pending", "processed", "failed", "refunded"] as const;
 export type ChargeStatus = typeof CHARGE_STATUS_OPTIONS[number];
+
+// Staff table - employee tracking
+export const staff = pgTable("staff", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  pinCode: varchar("pin_code", { length: 4 }).notNull().unique(),
+  dailyScanGoal: integer("daily_scan_goal").default(50),
+  active: integer("active").notNull().default(1),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertStaffSchema = createInsertSchema(staff).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertStaff = z.infer<typeof insertStaffSchema>;
+export type Staff = typeof staff.$inferSelect;
+
+// Staff shifts table - clock in/out tracking
+export const staffShifts = pgTable("staff_shifts", {
+  id: serial("id").primaryKey(),
+  staffId: integer("staff_id").notNull(),
+  clockIn: timestamp("clock_in").notNull().defaultNow(),
+  clockOut: timestamp("clock_out"),
+  itemsScanned: integer("items_scanned").notNull().default(0),
+}, (table) => [
+  index("IDX_staff_shifts_staff").on(table.staffId),
+  index("IDX_staff_shifts_clock_in").on(table.clockIn),
+]);
+
+export const insertStaffShiftSchema = createInsertSchema(staffShifts).omit({
+  id: true,
+});
+export type InsertStaffShift = z.infer<typeof insertStaffShiftSchema>;
+export type StaffShift = typeof staffShifts.$inferSelect;
+
+// Batches table - inventory batches for tracking
+export const batches = pgTable("batches", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  totalItems: integer("total_items").notNull().default(0),
+  soldItems: integer("sold_items").notNull().default(0),
+  totalCost: integer("total_cost").notNull().default(0), // In cents
+  totalRevenue: integer("total_revenue").notNull().default(0), // In cents
+  active: integer("active").notNull().default(1),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertBatchSchema = createInsertSchema(batches).omit({
+  id: true,
+  totalItems: true,
+  soldItems: true,
+  totalCost: true,
+  totalRevenue: true,
+  createdAt: true,
+});
+export type InsertBatch = z.infer<typeof insertBatchSchema>;
+export type Batch = typeof batches.$inferSelect;

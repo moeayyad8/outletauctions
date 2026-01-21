@@ -1,6 +1,6 @@
-import { users, bids, watchlist, auctions, tags, auctionTags, shelves, routingConfig, brandRoutingStats, clothesInventory, pendingCharges, paymentHistory, type User, type UpsertUser, type Bid, type InsertBid, type Watchlist, type InsertWatchlist, type Auction, type InsertAuction, type Tag, type InsertTag, type AuctionTag, type Shelf, type InsertShelf, type RoutingConfig, type BrandRoutingStat, type ClothesItem, type InsertClothes, type PendingCharge, type InsertPendingCharge, type PaymentHistory, type InsertPaymentHistory } from "@shared/schema";
+import { users, bids, watchlist, auctions, tags, auctionTags, shelves, routingConfig, brandRoutingStats, clothesInventory, pendingCharges, paymentHistory, staff, staffShifts, batches, type User, type UpsertUser, type Bid, type InsertBid, type Watchlist, type InsertWatchlist, type Auction, type InsertAuction, type Tag, type InsertTag, type AuctionTag, type Shelf, type InsertShelf, type RoutingConfig, type BrandRoutingStat, type ClothesItem, type InsertClothes, type PendingCharge, type InsertPendingCharge, type PaymentHistory, type InsertPaymentHistory, type Staff, type InsertStaff, type StaffShift, type InsertStaffShift, type Batch, type InsertBatch } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, like, inArray, sql } from "drizzle-orm";
+import { eq, desc, and, like, inArray, sql, gte, lte, isNull } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -75,6 +75,37 @@ export interface IStorage {
   getUserPaymentHistory(userId: string): Promise<PaymentHistory[]>;
   // User queries for batch processing
   getUsersWithPendingCharges(): Promise<User[]>;
+  // Staff management
+  getAllStaff(): Promise<Staff[]>;
+  getActiveStaff(): Promise<Staff[]>;
+  getStaff(id: number): Promise<Staff | undefined>;
+  getStaffByPin(pin: string): Promise<Staff | undefined>;
+  createStaff(staffData: InsertStaff): Promise<Staff>;
+  updateStaff(id: number, data: Partial<InsertStaff>): Promise<Staff | undefined>;
+  deactivateStaff(id: number): Promise<Staff | undefined>;
+  // Staff shifts
+  clockIn(staffId: number): Promise<StaffShift>;
+  clockOut(shiftId: number): Promise<StaffShift | undefined>;
+  getActiveShift(staffId: number): Promise<StaffShift | undefined>;
+  getStaffShifts(staffId: number, startDate?: Date, endDate?: Date): Promise<StaffShift[]>;
+  incrementShiftScans(shiftId: number): Promise<void>;
+  // Batches
+  getAllBatches(): Promise<Batch[]>;
+  getActiveBatch(): Promise<Batch | undefined>;
+  getBatch(id: number): Promise<Batch | undefined>;
+  createBatch(batch: InsertBatch): Promise<Batch>;
+  updateBatch(id: number, data: Partial<InsertBatch>): Promise<Batch | undefined>;
+  deactivateBatch(id: number): Promise<Batch | undefined>;
+  incrementBatchItems(batchId: number, cost: number): Promise<void>;
+  incrementBatchSold(batchId: number, revenue: number): Promise<void>;
+  // Analytics
+  getStaffScanStats(staffId: number, startDate?: Date, endDate?: Date): Promise<{ totalScans: number; totalHours: number }>;
+  getBatchStats(): Promise<{ id: number; name: string; totalItems: number; soldItems: number; sellThrough: number; roi: number }[]>;
+  getInventoryAging(): Promise<{ range: string; count: number }[]>;
+  getCategoryPerformance(): Promise<{ category: string; listed: number; sold: number; sellThrough: number }[]>;
+  // Item cost updates
+  updateAuctionCost(id: number, cost: number): Promise<Auction | undefined>;
+  updateClothesCost(id: number, cost: number): Promise<ClothesItem | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -507,6 +538,185 @@ export class DatabaseStorage implements IStorage {
     
     return db.select().from(users)
       .where(inArray(users.id, userIds.map(u => u.userId)));
+  }
+
+  // Staff management
+  async getAllStaff(): Promise<Staff[]> {
+    return db.select().from(staff).orderBy(staff.name);
+  }
+
+  async getActiveStaff(): Promise<Staff[]> {
+    return db.select().from(staff).where(eq(staff.active, 1)).orderBy(staff.name);
+  }
+
+  async getStaff(id: number): Promise<Staff | undefined> {
+    const [result] = await db.select().from(staff).where(eq(staff.id, id));
+    return result;
+  }
+
+  async getStaffByPin(pin: string): Promise<Staff | undefined> {
+    const [result] = await db.select().from(staff).where(and(eq(staff.pinCode, pin), eq(staff.active, 1)));
+    return result;
+  }
+
+  async createStaff(staffData: InsertStaff): Promise<Staff> {
+    const [newStaff] = await db.insert(staff).values(staffData).returning();
+    return newStaff;
+  }
+
+  async updateStaff(id: number, data: Partial<InsertStaff>): Promise<Staff | undefined> {
+    const [updated] = await db.update(staff).set(data).where(eq(staff.id, id)).returning();
+    return updated;
+  }
+
+  async deactivateStaff(id: number): Promise<Staff | undefined> {
+    const [updated] = await db.update(staff).set({ active: 0 }).where(eq(staff.id, id)).returning();
+    return updated;
+  }
+
+  // Staff shifts
+  async clockIn(staffId: number): Promise<StaffShift> {
+    const [shift] = await db.insert(staffShifts).values({ staffId, clockIn: new Date(), itemsScanned: 0 }).returning();
+    return shift;
+  }
+
+  async clockOut(shiftId: number): Promise<StaffShift | undefined> {
+    const [shift] = await db.update(staffShifts).set({ clockOut: new Date() }).where(eq(staffShifts.id, shiftId)).returning();
+    return shift;
+  }
+
+  async getActiveShift(staffId: number): Promise<StaffShift | undefined> {
+    const [shift] = await db.select().from(staffShifts).where(and(eq(staffShifts.staffId, staffId), isNull(staffShifts.clockOut))).orderBy(desc(staffShifts.clockIn));
+    return shift;
+  }
+
+  async getStaffShifts(staffId: number, startDate?: Date, endDate?: Date): Promise<StaffShift[]> {
+    let conditions = [eq(staffShifts.staffId, staffId)];
+    if (startDate) conditions.push(gte(staffShifts.clockIn, startDate));
+    if (endDate) conditions.push(lte(staffShifts.clockIn, endDate));
+    return db.select().from(staffShifts).where(and(...conditions)).orderBy(desc(staffShifts.clockIn));
+  }
+
+  async incrementShiftScans(shiftId: number): Promise<void> {
+    await db.update(staffShifts).set({ itemsScanned: sql`${staffShifts.itemsScanned} + 1` }).where(eq(staffShifts.id, shiftId));
+  }
+
+  // Batches
+  async getAllBatches(): Promise<Batch[]> {
+    return db.select().from(batches).orderBy(desc(batches.createdAt));
+  }
+
+  async getActiveBatch(): Promise<Batch | undefined> {
+    const [batch] = await db.select().from(batches).where(eq(batches.active, 1)).orderBy(desc(batches.createdAt));
+    return batch;
+  }
+
+  async getBatch(id: number): Promise<Batch | undefined> {
+    const [batch] = await db.select().from(batches).where(eq(batches.id, id));
+    return batch;
+  }
+
+  async createBatch(batchData: InsertBatch): Promise<Batch> {
+    // Deactivate other batches first
+    await db.update(batches).set({ active: 0 }).where(eq(batches.active, 1));
+    const [newBatch] = await db.insert(batches).values({ ...batchData, active: 1 }).returning();
+    return newBatch;
+  }
+
+  async updateBatch(id: number, data: Partial<InsertBatch>): Promise<Batch | undefined> {
+    const [updated] = await db.update(batches).set(data).where(eq(batches.id, id)).returning();
+    return updated;
+  }
+
+  async deactivateBatch(id: number): Promise<Batch | undefined> {
+    const [updated] = await db.update(batches).set({ active: 0 }).where(eq(batches.id, id)).returning();
+    return updated;
+  }
+
+  async incrementBatchItems(batchId: number, cost: number): Promise<void> {
+    await db.update(batches).set({
+      totalItems: sql`${batches.totalItems} + 1`,
+      totalCost: sql`${batches.totalCost} + ${cost}`,
+    }).where(eq(batches.id, batchId));
+  }
+
+  async incrementBatchSold(batchId: number, revenue: number): Promise<void> {
+    await db.update(batches).set({
+      soldItems: sql`${batches.soldItems} + 1`,
+      totalRevenue: sql`${batches.totalRevenue} + ${revenue}`,
+    }).where(eq(batches.id, batchId));
+  }
+
+  // Analytics
+  async getStaffScanStats(staffId: number, startDate?: Date, endDate?: Date): Promise<{ totalScans: number; totalHours: number }> {
+    const shifts = await this.getStaffShifts(staffId, startDate, endDate);
+    let totalScans = 0;
+    let totalHours = 0;
+    for (const shift of shifts) {
+      totalScans += shift.itemsScanned || 0;
+      if (shift.clockOut) {
+        const hours = (new Date(shift.clockOut).getTime() - new Date(shift.clockIn).getTime()) / (1000 * 60 * 60);
+        totalHours += hours;
+      }
+    }
+    return { totalScans, totalHours };
+  }
+
+  async getBatchStats(): Promise<{ id: number; name: string; totalItems: number; soldItems: number; sellThrough: number; roi: number }[]> {
+    const allBatches = await this.getAllBatches();
+    return allBatches.map(batch => ({
+      id: batch.id,
+      name: batch.name,
+      totalItems: batch.totalItems,
+      soldItems: batch.soldItems,
+      sellThrough: batch.totalItems > 0 ? Math.round((batch.soldItems / batch.totalItems) * 100) : 0,
+      roi: batch.totalCost > 0 ? Math.round(((batch.totalRevenue - batch.totalCost) / batch.totalCost) * 100) : 0,
+    }));
+  }
+
+  async getInventoryAging(): Promise<{ range: string; count: number }[]> {
+    const now = new Date();
+    const day30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const day60 = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+    const day90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+
+    const [under30] = await db.select({ count: sql<number>`count(*)` }).from(auctions).where(and(gte(auctions.createdAt, day30), isNull(auctions.soldAt)));
+    const [day30to60] = await db.select({ count: sql<number>`count(*)` }).from(auctions).where(and(gte(auctions.createdAt, day60), lte(auctions.createdAt, day30), isNull(auctions.soldAt)));
+    const [day60to90] = await db.select({ count: sql<number>`count(*)` }).from(auctions).where(and(gte(auctions.createdAt, day90), lte(auctions.createdAt, day60), isNull(auctions.soldAt)));
+    const [over90] = await db.select({ count: sql<number>`count(*)` }).from(auctions).where(and(lte(auctions.createdAt, day90), isNull(auctions.soldAt)));
+
+    return [
+      { range: '0-30 days', count: Number(under30?.count) || 0 },
+      { range: '30-60 days', count: Number(day30to60?.count) || 0 },
+      { range: '60-90 days', count: Number(day60to90?.count) || 0 },
+      { range: '90+ days', count: Number(over90?.count) || 0 },
+    ];
+  }
+
+  async getCategoryPerformance(): Promise<{ category: string; listed: number; sold: number; sellThrough: number }[]> {
+    const results = await db.select({
+      category: auctions.category,
+      listed: sql<number>`count(*)`,
+      sold: sql<number>`count(case when ${auctions.soldAt} is not null then 1 end)`,
+    }).from(auctions).groupBy(auctions.category);
+
+    return results.map(r => ({
+      category: r.category || 'Uncategorized',
+      listed: Number(r.listed) || 0,
+      sold: Number(r.sold) || 0,
+      sellThrough: r.listed > 0 ? Math.round((Number(r.sold) / Number(r.listed)) * 100) : 0,
+    }));
+  }
+
+  // Item cost updates
+  async updateAuctionCost(id: number, cost: number): Promise<Auction | undefined> {
+    const [updated] = await db.update(auctions).set({ cost }).where(eq(auctions.id, id)).returning();
+    return updated;
+  }
+
+  async updateClothesCost(id: number, cost: number): Promise<ClothesItem | undefined> {
+    const [updated] = await db.update(clothesInventory).set({ cost }).where(eq(clothesInventory.id, id)).returning();
+    return updated;
   }
 }
 

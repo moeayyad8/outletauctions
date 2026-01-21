@@ -10,7 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useUpload } from '@/hooks/use-upload';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel, Store, ExternalLink, Grid3X3, ArrowRightLeft, LogIn, LogOut, AlertTriangle, CheckCircle2, Scale, ChevronDown, ChevronUp, Flag, Search, Settings2, RotateCcw, Shirt } from 'lucide-react';
+import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel, Store, ExternalLink, Grid3X3, ArrowRightLeft, LogIn, LogOut, AlertTriangle, CheckCircle2, Scale, ChevronDown, ChevronUp, Flag, Search, Settings2, RotateCcw, Shirt, LayoutDashboard, User } from 'lucide-react';
 import { SiAmazon, SiEbay } from 'react-icons/si';
 import JsBarcode from 'jsbarcode';
 import type { Auction, Tag as TagType, Shelf } from '@shared/schema';
@@ -200,6 +200,16 @@ export default function Staff() {
   const [attempts, setAttempts] = useState(() => getStaffAuthState().attempts);
   const [lockedUntil, setLockedUntil] = useState<number | null>(() => getStaffAuthState().lockedUntil);
   const [loginError, setLoginError] = useState('');
+  
+  // Staff member tracking
+  const [loggedInStaff, setLoggedInStaff] = useState<{ id: number; name: string; shiftId: number } | null>(() => {
+    try {
+      const stored = localStorage.getItem('loggedInStaff');
+      return stored ? JSON.parse(stored) : null;
+    } catch { return null; }
+  });
+  const [staffPinInput, setStaffPinInput] = useState('');
+  const [showStaffLoginDialog, setShowStaffLoginDialog] = useState(false);
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -577,6 +587,39 @@ export default function Staff() {
     }
   };
 
+  // Staff login mutation
+  const staffLoginMutation = useMutation({
+    mutationFn: async (pin: string) => {
+      const response = await apiRequest('POST', '/api/staff/login', { pin });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      const staffData = { id: data.staff.id, name: data.staff.name, shiftId: data.shift.id };
+      setLoggedInStaff(staffData);
+      localStorage.setItem('loggedInStaff', JSON.stringify(staffData));
+      setShowStaffLoginDialog(false);
+      setStaffPinInput('');
+      toast({ title: `Welcome, ${data.staff.name}!`, description: 'Shift started. Your scans are being tracked.' });
+    },
+    onError: () => {
+      toast({ title: 'Invalid PIN', variant: 'destructive' });
+      setStaffPinInput('');
+    }
+  });
+
+  const handleStaffLogout = async () => {
+    if (loggedInStaff?.shiftId) {
+      try {
+        await apiRequest('POST', `/api/shifts/${loggedInStaff.shiftId}/clockout`, {});
+        toast({ title: 'Clocked out', description: 'Your shift has ended.' });
+      } catch (e) {
+        console.error('Clock out failed:', e);
+      }
+    }
+    setLoggedInStaff(null);
+    localStorage.removeItem('loggedInStaff');
+  };
+
   const createAuctionMutation = useMutation({
     mutationFn: async (item: BatchItem) => {
       const auctionData = {
@@ -595,6 +638,7 @@ export default function Staff() {
         condition: item.condition,
         weightClass: item.weightClass,
         stockQuantity: item.stockQuantity,
+        scannedByStaffId: loggedInStaff?.id || null,
       };
       const response = await apiRequest('POST', '/api/staff/auctions', auctionData);
       const auction = await response.json();
@@ -870,6 +914,11 @@ export default function Staff() {
             <div className="flex items-center justify-between mb-1">
               <h1 className="text-2xl font-bold tracking-tight">Scanner</h1>
               <div className="flex items-center gap-2">
+                <Link href="/admin">
+                  <Button variant="ghost" size="sm" data-testid="button-admin">
+                    <LayoutDashboard className="w-4 h-4" />
+                  </Button>
+                </Link>
                 <Link href="/clothes">
                   <Button variant="outline" size="sm" data-testid="button-clothes-scanner">
                     <Shirt className="w-4 h-4 mr-1" />
@@ -881,7 +930,33 @@ export default function Staff() {
                 </Badge>
               </div>
             </div>
-            <p className="text-sm text-muted-foreground">Scan products to build your batch</p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">Scan products to build your batch</p>
+              {loggedInStaff ? (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleStaffLogout}
+                  className="h-7 text-xs"
+                  data-testid="button-staff-logout"
+                >
+                  <User className="w-3 h-3 mr-1" />
+                  {loggedInStaff.name}
+                  <LogOut className="w-3 h-3 ml-1" />
+                </Button>
+              ) : (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setShowStaffLoginDialog(true)}
+                  className="h-7 text-xs"
+                  data-testid="button-staff-login-pin"
+                >
+                  <User className="w-3 h-3 mr-1" />
+                  Clock In
+                </Button>
+              )}
+            </div>
           </header>
 
           {/* Scan Defaults Panel */}
@@ -2218,6 +2293,35 @@ export default function Staff() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={showStaffLoginDialog} onOpenChange={setShowStaffLoginDialog}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Clock In</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">Enter your 4-digit PIN to start tracking your scans.</p>
+            <Input
+              type="password"
+              placeholder="Enter PIN"
+              value={staffPinInput}
+              onChange={(e) => setStaffPinInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              maxLength={4}
+              className="text-center text-2xl tracking-widest"
+              autoFocus
+              data-testid="input-staff-pin"
+            />
+            <Button 
+              className="w-full" 
+              onClick={() => staffLoginMutation.mutate(staffPinInput)}
+              disabled={staffPinInput.length !== 4 || staffLoginMutation.isPending}
+              data-testid="button-clock-in"
+            >
+              {staffLoginMutation.isPending ? 'Logging in...' : 'Clock In'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

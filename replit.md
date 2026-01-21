@@ -100,6 +100,37 @@ Preferred communication style: Simple, everyday language.
 - Error codes: NO_PAYMENT_METHOD, BIDDING_BLOCKED
 - Users redirected to Profile page to add payment method
 
+### Staff Tracking & Analytics
+
+**Staff Management:**
+- Staff table with unique 4-digit PIN codes for employee tracking
+- Staff shifts with clock in/out tracking
+- Daily scan goals with progress tracking
+- Items-per-hour performance metrics
+
+**Batch Tracking:**
+- Batches for grouping inventory intake
+- Auto-assignment of active batch to new scans
+- Sell-through rate calculated per batch
+- ROI tracking (revenue vs cost per batch)
+
+**Cost Tracking:**
+- All items default to $2 cost
+- Cost editable via admin (4406 password protected)
+- Profit margin calculations
+
+**Analytics Dashboard (/admin):**
+- Staff performance: scans today, items/hour, goal progress
+- Batch performance: sell-through %, ROI per batch
+- Inventory aging: 30/60/90 day unsold reports
+- Category performance: sell-through by category
+- Financial summary: total revenue, profit, ROI
+
+**Staff PINs (Initial):**
+- Employee 1: 1001
+- Employee 2: 1002
+- Employee 3: 1003
+
 ### External Dependencies
 
 **Third-Party Services:**
