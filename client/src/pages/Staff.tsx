@@ -943,9 +943,7 @@ export default function Staff() {
                   <span className="font-medium text-green-800 dark:text-green-200">
                     Welcome, {loggedInStaff.name}!
                   </span>
-                  <span className="text-sm text-green-600 dark:text-green-400">
-                    Your scans are being tracked
-                  </span>
+                  <span className="text-sm text-green-600 dark:text-green-400">You can start scanning!</span>
                 </div>
                 <Button 
                   variant="outline" 
@@ -1525,7 +1523,6 @@ export default function Staff() {
           </Card>
         </div>
       )}
-
       {activeTab === 'inventory' && (
         <div className="max-w-2xl mx-auto p-4 space-y-4">
           <header className="pt-2">
@@ -1833,7 +1830,6 @@ export default function Staff() {
           })()}
         </div>
       )}
-
       {activeTab === 'fulfillment' && (
         <div className="max-w-2xl mx-auto p-4 space-y-4 pb-24">
           <header className="pt-2">
@@ -1935,7 +1931,6 @@ export default function Staff() {
           })()}
         </div>
       )}
-
       {activeTab === 'shelves' && (
         <div className="max-w-2xl mx-auto p-4 space-y-6">
           <header className="pt-2">
@@ -2164,7 +2159,6 @@ export default function Staff() {
           )}
         </div>
       )}
-
       {/* Bottom Tab Bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-background border-t safe-area-pb">
         <div className="max-w-2xl mx-auto flex">
@@ -2218,7 +2212,6 @@ export default function Staff() {
           </button>
         </div>
       </div>
-
       <Dialog open={cameraOpen} onOpenChange={(open) => !open && closeCamera()}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden">
           <DialogHeader className="p-4 pb-0 flex flex-row items-center justify-between">
@@ -2265,7 +2258,6 @@ export default function Staff() {
           </div>
         </DialogContent>
       </Dialog>
-
       <Dialog open={showBarcodeDialog} onOpenChange={setShowBarcodeDialog}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
@@ -2287,7 +2279,6 @@ export default function Staff() {
           </div>
         </DialogContent>
       </Dialog>
-
       <AlertDialog open={deleteConfirmId !== null} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -2313,7 +2304,6 @@ export default function Staff() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
       <Dialog open={showStaffLoginDialog} onOpenChange={setShowStaffLoginDialog}>
         <DialogContent className="max-w-xs">
           <DialogHeader>
