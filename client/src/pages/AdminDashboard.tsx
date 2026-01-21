@@ -176,6 +176,7 @@ export default function AdminDashboard() {
 
   const { data: activeBatch } = useQuery<Batch | null>({
     queryKey: ['/api/batches/active'],
+    queryFn: () => adminApiRequest('GET', '/api/batches/active'),
     enabled: isAuthenticated,
   });
 
