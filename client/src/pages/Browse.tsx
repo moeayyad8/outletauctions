@@ -133,7 +133,7 @@ export default function Browse() {
             data-testid="tab-auctions"
           >
             <Gavel className="w-4 h-4" />
-            <span>Auctions</span>
+            <span>Items</span>
             <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">
               {auctions.length}
             </Badge>
