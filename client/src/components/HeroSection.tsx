@@ -60,28 +60,35 @@ export function HeroSection() {
       className="relative bg-gradient-to-r from-primary/15 via-primary/10 to-primary/5 dark:from-primary/20 dark:via-primary/15 dark:to-primary/10 rounded-xl overflow-hidden"
       data-testid="hero-section"
     >
-      <div className="flex items-center justify-between p-4 gap-4">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <Sparkles className="w-4 h-4 text-primary" />
-            <span className="text-xs font-medium text-primary uppercase tracking-wide">Featured</span>
-          </div>
-          <h2 className="text-xl font-bold tracking-tight">
-            0% Fees
-          </h2>
-          {earliestEndTime && (
-            <div className="flex items-center gap-1.5 mt-1 text-sm text-muted-foreground">
-              <Clock className="w-3.5 h-3.5" />
-              <span>Ends in {formatTimeLeft(earliestEndTime)}</span>
-            </div>
-          )}
+      <div className="flex items-center gap-4 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
+          <span className="text-xs font-medium text-primary uppercase tracking-wide">Featured</span>
         </div>
+        
+        <div className="h-4 w-px bg-border" />
+        
+        <h2 className="text-base font-bold tracking-tight whitespace-nowrap">
+          0% Fees
+        </h2>
 
-        <div className="flex items-center -space-x-3">
+        {earliestEndTime && (
+          <>
+            <div className="h-4 w-px bg-border" />
+            <div className="flex items-center gap-1.5 text-sm text-muted-foreground whitespace-nowrap">
+              <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>{formatTimeLeft(earliestEndTime)}</span>
+            </div>
+          </>
+        )}
+
+        <div className="flex-1" />
+
+        <div className="flex items-center -space-x-2 flex-shrink-0">
           {displayAuctions.map((auction, index) => (
             <div
               key={auction.id}
-              className="relative w-14 h-14 rounded-lg overflow-hidden border-2 border-background shadow-md"
+              className="relative w-10 h-10 rounded-lg overflow-hidden border-2 border-background shadow-sm"
               style={{ zIndex: displayAuctions.length - index }}
               data-testid={`card-featured-auction-${auction.id}`}
             >
@@ -93,14 +100,14 @@ export function HeroSection() {
                 />
               ) : (
                 <div className="w-full h-full bg-muted flex items-center justify-center">
-                  <Gavel className="w-5 h-5 text-muted-foreground" />
+                  <Gavel className="w-4 h-4 text-muted-foreground" />
                 </div>
               )}
             </div>
           ))}
-          {displayAuctions.length > 0 && (
-            <div className="relative w-14 h-14 rounded-lg bg-background border-2 border-background shadow-md flex items-center justify-center">
-              <span className="text-xs font-bold text-primary">+{auctions.length}</span>
+          {auctions.length > 3 && (
+            <div className="relative w-10 h-10 rounded-lg bg-muted border-2 border-background shadow-sm flex items-center justify-center">
+              <span className="text-[10px] font-bold text-muted-foreground">+{auctions.length - 3}</span>
             </div>
           )}
         </div>
