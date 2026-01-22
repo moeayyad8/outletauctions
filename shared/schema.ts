@@ -121,6 +121,7 @@ export const auctions = pgTable("auctions", {
   cost: integer("cost").notNull().default(200), // In cents, default $2
   soldAt: timestamp("sold_at"),
   soldPrice: integer("sold_price"), // In cents
+  showOnHomepage: integer("show_on_homepage").notNull().default(0), // 1 = featured on homepage
   createdAt: timestamp("created_at").defaultNow(),
 });
 

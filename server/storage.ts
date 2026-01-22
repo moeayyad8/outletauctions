@@ -14,6 +14,7 @@ export interface IStorage {
   importAuction(auction: InsertAuction & { internalCode?: string }): Promise<Auction>;
   getAllAuctions(): Promise<Auction[]>;
   getActiveAuctions(): Promise<Auction[]>;
+  getHomepageAuctions(): Promise<Auction[]>;
   getAuction(id: number): Promise<Auction | undefined>;
   updateAuctionStatus(id: number, status: string, endTime?: Date): Promise<Auction | undefined>;
   updateAuctionExternal(id: number, destination: string, externalStatus: string, externalListingId: string, externalListingUrl: string, externalPayload: unknown): Promise<Auction | undefined>;
@@ -177,6 +178,12 @@ export class DatabaseStorage implements IStorage {
 
   async getActiveAuctions(): Promise<Auction[]> {
     return db.select().from(auctions).where(eq(auctions.status, 'active')).orderBy(desc(auctions.createdAt));
+  }
+
+  async getHomepageAuctions(): Promise<Auction[]> {
+    return db.select().from(auctions)
+      .where(and(eq(auctions.status, 'active'), eq(auctions.showOnHomepage, 1)))
+      .orderBy(auctions.endTime);
   }
 
   async getAuction(id: number): Promise<Auction | undefined> {

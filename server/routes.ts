@@ -672,6 +672,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get featured auctions for homepage section (showOnHomepage = 1)
+  app.get('/api/auctions/homepage', async (req, res) => {
+    try {
+      const homepageAuctions = await storage.getHomepageAuctions();
+      res.json(homepageAuctions);
+    } catch (error) {
+      console.error("Error fetching homepage auctions:", error);
+      res.status(500).json({ message: "Failed to fetch homepage auctions" });
+    }
+  });
+
   // Update auction status (send to auction)
   app.patch('/api/staff/auctions/:id/status', async (req, res) => {
     try {

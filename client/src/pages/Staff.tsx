@@ -10,7 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useUpload } from '@/hooks/use-upload';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel, Store, ExternalLink, Grid3X3, ArrowRightLeft, LogIn, LogOut, AlertTriangle, CheckCircle2, Scale, ChevronDown, ChevronUp, Flag, Search, Settings2, RotateCcw, Shirt, LayoutDashboard, User } from 'lucide-react';
+import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel, Store, ExternalLink, Grid3X3, ArrowRightLeft, LogIn, LogOut, AlertTriangle, CheckCircle2, Scale, ChevronDown, ChevronUp, Flag, Search, Settings2, RotateCcw, Shirt, LayoutDashboard, User, Star } from 'lucide-react';
 import { SiAmazon, SiEbay } from 'react-icons/si';
 import JsBarcode from 'jsbarcode';
 import type { Auction, Tag as TagType, Shelf } from '@shared/schema';
@@ -55,6 +55,7 @@ interface BatchItem extends ScanResult {
   weightClass: WeightClass | null;
   weightOunces: number | null;
   stockQuantity: number;
+  showOnHomepage: boolean;
 }
 
 type TabType = 'scanner' | 'inventory' | 'fulfillment' | 'shelves';
@@ -66,6 +67,7 @@ interface ScanDefaults {
   condition: ItemCondition | null;
   weightClass: WeightClass | null;
   stockQuantity: number;
+  showOnHomepage: boolean;
 }
 
 const DEFAULT_SCAN_SETTINGS: ScanDefaults = {
@@ -75,6 +77,7 @@ const DEFAULT_SCAN_SETTINGS: ScanDefaults = {
   condition: null,
   weightClass: null,
   stockQuantity: 1,
+  showOnHomepage: false,
 };
 
 function loadScanDefaults(): ScanDefaults {
@@ -481,6 +484,7 @@ export default function Staff() {
         weightClass: defaults.weightClass,
         weightOunces: null,
         stockQuantity: defaults.stockQuantity,
+        showOnHomepage: defaults.showOnHomepage,
       };
       setBatch(prev => [newItem, ...prev]);
       setCode('');
@@ -527,6 +531,7 @@ export default function Staff() {
         weightClass: defaults.weightClass,
         weightOunces: null,
         stockQuantity: defaults.stockQuantity,
+        showOnHomepage: defaults.showOnHomepage,
       };
       setBatch(prev => [newItem, ...prev]);
       toast({ title: `Generated: ${codeData.code}` });
@@ -643,6 +648,7 @@ export default function Staff() {
         condition: item.condition,
         weightClass: item.weightClass,
         stockQuantity: item.stockQuantity,
+        showOnHomepage: item.showOnHomepage ? 1 : 0,
         scannedByStaffId: loggedInStaffRef.current?.id || null,
       };
       const response = await apiRequest('POST', '/api/staff/auctions', auctionData);
@@ -1117,6 +1123,16 @@ export default function Staff() {
                   <SelectItem value="heavy">Heavy (&gt;5lb)</SelectItem>
                 </SelectContent>
               </Select>
+
+              <Button
+                variant={scanDefaults.showOnHomepage ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => updateScanDefaults({ showOnHomepage: !scanDefaults.showOnHomepage })}
+                data-testid="button-default-homepage"
+              >
+                <Star className={`w-3.5 h-3.5 mr-1.5 ${scanDefaults.showOnHomepage ? '' : 'text-muted-foreground'}`} />
+                Featured
+              </Button>
             </div>
 
             <p className="text-[11px] text-muted-foreground text-center">
