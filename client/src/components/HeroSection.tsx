@@ -1,4 +1,4 @@
-import { Gavel } from 'lucide-react';
+import { Gavel, Clock, Sparkles } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect, useMemo } from 'react';
 import type { Auction } from '@shared/schema';
@@ -7,85 +7,19 @@ function formatPrice(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-function CountdownTimer({ endTime }: { endTime: Date }) {
-  const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
-
-  useEffect(() => {
-    const calculateTimeLeft = () => {
-      const now = new Date().getTime();
-      const end = new Date(endTime).getTime();
-      const diff = Math.max(0, end - now);
-
-      setTimeLeft({
-        days: Math.floor(diff / (1000 * 60 * 60 * 24)),
-        hours: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
-        minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
-        seconds: Math.floor((diff % (1000 * 60)) / 1000),
-      });
-    };
-
-    calculateTimeLeft();
-    const timer = setInterval(calculateTimeLeft, 1000);
-    return () => clearInterval(timer);
-  }, [endTime]);
-
-  const formatUnit = (value: number) => value.toString().padStart(2, '0');
-
-  return (
-    <div className="flex items-center gap-1 text-sm font-mono">
-      <span className="text-muted-foreground">Ends in</span>
-      <div className="flex items-center gap-0.5">
-        {timeLeft.days > 0 && (
-          <>
-            <span className="bg-background border rounded px-1.5 py-0.5 font-bold">{formatUnit(timeLeft.days)}</span>
-            <span className="text-muted-foreground">:</span>
-          </>
-        )}
-        <span className="bg-background border rounded px-1.5 py-0.5 font-bold">{formatUnit(timeLeft.hours)}</span>
-        <span className="text-muted-foreground">:</span>
-        <span className="bg-background border rounded px-1.5 py-0.5 font-bold">{formatUnit(timeLeft.minutes)}</span>
-        <span className="text-muted-foreground">:</span>
-        <span className="bg-background border rounded px-1.5 py-0.5 font-bold">{formatUnit(timeLeft.seconds)}</span>
-      </div>
-    </div>
-  );
-}
-
-function ProductCard({ auction }: { auction: Auction }) {
-  const discount = auction.retailPrice && auction.currentBid 
-    ? Math.round(((auction.retailPrice - auction.currentBid) / auction.retailPrice) * 100)
-    : auction.retailPrice && auction.startingBid
-    ? Math.round(((auction.retailPrice - auction.startingBid) / auction.retailPrice) * 100)
-    : null;
-
-  const displayPrice = auction.currentBid > 0 ? auction.currentBid : auction.startingBid;
-
-  return (
-    <div 
-      className="flex-shrink-0 w-20 cursor-pointer hover-elevate rounded-md p-1"
-      data-testid={`card-featured-auction-${auction.id}`}
-    >
-      <div className="aspect-square rounded-md overflow-hidden bg-muted mb-1">
-        {auction.image ? (
-          <img 
-            src={auction.image} 
-            alt={auction.title}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-            <Gavel className="w-6 h-6" />
-          </div>
-        )}
-      </div>
-      <div className="space-y-0.5">
-        {discount && discount > 0 && (
-          <span className="text-[10px] font-semibold text-destructive">-{discount}%</span>
-        )}
-        <p className="text-xs font-bold">{formatPrice(displayPrice)}</p>
-      </div>
-    </div>
-  );
+function formatTimeLeft(endTime: Date): string {
+  const now = new Date().getTime();
+  const end = new Date(endTime).getTime();
+  const diff = Math.max(0, end - now);
+  
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  
+  if (hours > 24) {
+    const days = Math.floor(hours / 24);
+    return `${days}d ${hours % 24}h`;
+  }
+  return `${hours}h ${minutes}m`;
 }
 
 export function HeroSection() {
@@ -93,7 +27,13 @@ export function HeroSection() {
     queryKey: ['/api/auctions/homepage'],
   });
 
-  // Limit to 3 items max
+  const [, setTick] = useState(0);
+  
+  useEffect(() => {
+    const timer = setInterval(() => setTick(t => t + 1), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
   const displayAuctions = auctions.slice(0, 3);
 
   const earliestEndTime = useMemo(() => {
@@ -103,39 +43,64 @@ export function HeroSection() {
     return new Date(Math.min(...withEndTimes.map(a => new Date(a.endTime!).getTime())));
   }, [auctions]);
 
+  if (isLoading) {
+    return (
+      <div className="bg-gradient-to-r from-primary/10 to-primary/5 rounded-xl p-4 animate-pulse" data-testid="hero-section">
+        <div className="h-16" />
+      </div>
+    );
+  }
+
+  if (displayAuctions.length === 0) {
+    return null;
+  }
+
   return (
-    <div className="bg-muted/50 rounded-xl p-3" data-testid="hero-section">
-      <div className="flex items-center gap-4">
-        {/* Left Panel - Text Content */}
-        <div className="flex-shrink-0 space-y-1">
-          <h2 className="text-lg font-bold text-foreground">
-            NO FEES
+    <div 
+      className="relative bg-gradient-to-r from-primary/15 via-primary/10 to-primary/5 dark:from-primary/20 dark:via-primary/15 dark:to-primary/10 rounded-xl overflow-hidden"
+      data-testid="hero-section"
+    >
+      <div className="flex items-center justify-between p-4 gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <Sparkles className="w-4 h-4 text-primary" />
+            <span className="text-xs font-medium text-primary uppercase tracking-wide">Featured</span>
+          </div>
+          <h2 className="text-xl font-bold tracking-tight">
+            0% Fees
           </h2>
           {earliestEndTime && (
-            <CountdownTimer endTime={earliestEndTime} />
+            <div className="flex items-center gap-1.5 mt-1 text-sm text-muted-foreground">
+              <Clock className="w-3.5 h-3.5" />
+              <span>Ends in {formatTimeLeft(earliestEndTime)}</span>
+            </div>
           )}
         </div>
 
-        {/* Right Panel - Products */}
-        <div className="flex-1 flex justify-end">
-          {isLoading ? (
-            <div className="flex gap-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="flex-shrink-0 w-20">
-                  <div className="aspect-square rounded-lg bg-muted animate-pulse mb-1" />
-                  <div className="h-3 bg-muted rounded animate-pulse w-12" />
+        <div className="flex items-center -space-x-3">
+          {displayAuctions.map((auction, index) => (
+            <div
+              key={auction.id}
+              className="relative w-14 h-14 rounded-lg overflow-hidden border-2 border-background shadow-md"
+              style={{ zIndex: displayAuctions.length - index }}
+              data-testid={`card-featured-auction-${auction.id}`}
+            >
+              {auction.image ? (
+                <img 
+                  src={auction.image} 
+                  alt={auction.title}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-muted flex items-center justify-center">
+                  <Gavel className="w-5 h-5 text-muted-foreground" />
                 </div>
-              ))}
+              )}
             </div>
-          ) : displayAuctions.length > 0 ? (
-            <div className="flex gap-2">
-              {displayAuctions.map((auction) => (
-                <ProductCard key={auction.id} auction={auction} />
-              ))}
-            </div>
-          ) : (
-            <div className="text-muted-foreground text-sm">
-              No featured items
+          ))}
+          {displayAuctions.length > 0 && (
+            <div className="relative w-14 h-14 rounded-lg bg-background border-2 border-background shadow-md flex items-center justify-center">
+              <span className="text-xs font-bold text-primary">+{auctions.length}</span>
             </div>
           )}
         </div>
