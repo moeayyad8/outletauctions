@@ -1011,7 +1011,7 @@ export default function Staff() {
               <Button
                 variant={scanDefaults.destination === 'auction' ? 'default' : 'outline'}
                 size="sm"
-                className="flex-1 h-9"
+                className="flex-1"
                 onClick={() => updateScanDefaults({ destination: 'auction' })}
                 data-testid="button-default-auction"
               >
@@ -1021,7 +1021,7 @@ export default function Staff() {
               <Button
                 variant={scanDefaults.destination === 'ebay' ? 'default' : 'outline'}
                 size="sm"
-                className="flex-1 h-9"
+                className="flex-1"
                 onClick={() => updateScanDefaults({ destination: 'ebay' })}
                 data-testid="button-default-ebay"
               >
@@ -1031,7 +1031,7 @@ export default function Staff() {
               <Button
                 variant={scanDefaults.destination === 'amazon' ? 'default' : 'outline'}
                 size="sm"
-                className="flex-1 h-9"
+                className="flex-1"
                 onClick={() => updateScanDefaults({ destination: 'amazon' })}
                 data-testid="button-default-amazon"
               >
@@ -1039,6 +1039,18 @@ export default function Staff() {
                 Amazon
               </Button>
             </div>
+
+            {/* Featured Toggle - Show on Homepage */}
+            <Button
+              variant={scanDefaults.showOnHomepage ? 'default' : 'outline'}
+              size="sm"
+              className="w-full"
+              onClick={() => updateScanDefaults({ showOnHomepage: !scanDefaults.showOnHomepage })}
+              data-testid="button-default-homepage"
+            >
+              <Star className={`w-4 h-4 mr-1.5 ${scanDefaults.showOnHomepage ? 'fill-current' : 'text-muted-foreground'}`} />
+              {scanDefaults.showOnHomepage ? 'Featured on Homepage' : 'Mark as Featured'}
+            </Button>
 
             {/* Shelf, Quantity, Brand, Condition, Weight */}
             <div className="grid grid-cols-2 gap-2">
@@ -1123,16 +1135,6 @@ export default function Staff() {
                   <SelectItem value="heavy">Heavy (&gt;5lb)</SelectItem>
                 </SelectContent>
               </Select>
-
-              <Button
-                variant={scanDefaults.showOnHomepage ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => updateScanDefaults({ showOnHomepage: !scanDefaults.showOnHomepage })}
-                data-testid="button-default-homepage"
-              >
-                <Star className={`w-3.5 h-3.5 mr-1.5 ${scanDefaults.showOnHomepage ? '' : 'text-muted-foreground'}`} />
-                Featured
-              </Button>
             </div>
 
             <p className="text-[11px] text-muted-foreground text-center">
