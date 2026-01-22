@@ -1,4 +1,3 @@
-import { Button } from '@/components/ui/button';
 import { Gavel } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect, useMemo } from 'react';
@@ -63,10 +62,10 @@ function ProductCard({ auction }: { auction: Auction }) {
 
   return (
     <div 
-      className="flex-shrink-0 w-28 cursor-pointer hover-elevate rounded-lg p-1"
+      className="flex-shrink-0 w-20 cursor-pointer hover-elevate rounded-md p-1"
       data-testid={`card-featured-auction-${auction.id}`}
     >
-      <div className="aspect-square rounded-lg overflow-hidden bg-muted mb-2 relative">
+      <div className="aspect-square rounded-md overflow-hidden bg-muted mb-1">
         {auction.image ? (
           <img 
             src={auction.image} 
@@ -75,15 +74,15 @@ function ProductCard({ auction }: { auction: Auction }) {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-            <Gavel className="w-8 h-8" />
+            <Gavel className="w-6 h-6" />
           </div>
         )}
       </div>
       <div className="space-y-0.5">
         {discount && discount > 0 && (
-          <span className="text-xs font-semibold text-destructive">-{discount}%</span>
+          <span className="text-[10px] font-semibold text-destructive">-{discount}%</span>
         )}
-        <p className="text-sm font-bold">{formatPrice(displayPrice)}</p>
+        <p className="text-xs font-bold">{formatPrice(displayPrice)}</p>
       </div>
     </div>
   );
@@ -94,6 +93,9 @@ export function HeroSection() {
     queryKey: ['/api/auctions/homepage'],
   });
 
+  // Limit to 3 items max
+  const displayAuctions = auctions.slice(0, 3);
+
   const earliestEndTime = useMemo(() => {
     if (auctions.length === 0) return null;
     const withEndTimes = auctions.filter(a => a.endTime);
@@ -102,46 +104,38 @@ export function HeroSection() {
   }, [auctions]);
 
   return (
-    <div className="bg-muted/50 rounded-xl p-4 overflow-hidden" data-testid="hero-section">
-      <div className="flex flex-col sm:flex-row gap-4">
+    <div className="bg-muted/50 rounded-xl p-3" data-testid="hero-section">
+      <div className="flex items-center gap-4">
         {/* Left Panel - Text Content */}
-        <div className="flex-shrink-0 sm:w-40 space-y-3">
-          <h2 className="text-xl font-bold text-foreground">
+        <div className="flex-shrink-0 space-y-1">
+          <h2 className="text-lg font-bold text-foreground">
             NO FEES
           </h2>
           {earliestEndTime && (
             <CountdownTimer endTime={earliestEndTime} />
           )}
-          <Button
-            size="sm"
-            className="gap-2"
-            data-testid="button-hero-browse"
-          >
-            <Gavel className="h-4 w-4" />
-            Bid Now
-          </Button>
         </div>
 
-        {/* Right Panel - Scrolling Products */}
-        <div className="flex-1 overflow-hidden">
+        {/* Right Panel - Products */}
+        <div className="flex-1 flex justify-end">
           {isLoading ? (
-            <div className="flex gap-3 overflow-x-auto pb-2">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="flex-shrink-0 w-28">
-                  <div className="aspect-square rounded-lg bg-muted animate-pulse mb-2" />
-                  <div className="h-4 bg-muted rounded animate-pulse w-16" />
+            <div className="flex gap-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex-shrink-0 w-20">
+                  <div className="aspect-square rounded-lg bg-muted animate-pulse mb-1" />
+                  <div className="h-3 bg-muted rounded animate-pulse w-12" />
                 </div>
               ))}
             </div>
-          ) : auctions.length > 0 ? (
-            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-              {auctions.map((auction) => (
+          ) : displayAuctions.length > 0 ? (
+            <div className="flex gap-2">
+              {displayAuctions.map((auction) => (
                 <ProductCard key={auction.id} auction={auction} />
               ))}
             </div>
           ) : (
-            <div className="flex items-center justify-center h-28 text-muted-foreground text-sm">
-              No featured items yet
+            <div className="text-muted-foreground text-sm">
+              No featured items
             </div>
           )}
         </div>
