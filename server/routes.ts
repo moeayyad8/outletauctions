@@ -126,9 +126,13 @@ export async function registerRoutes(
   await setupAuth(app);
   registerObjectStorageRoutes(app);
   
-  // Seed shelves and routing config on startup
-  await storage.seedShelves();
-  await storage.seedRoutingConfig();
+  // Seed defaults if possible, but don't block API startup if this fails.
+  try {
+    await storage.seedShelves();
+    await storage.seedRoutingConfig();
+  } catch (error) {
+    console.error("Startup seed failed; continuing without blocking API routes:", error);
+  }
 
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {

@@ -495,8 +495,9 @@ export default function Staff() {
         toast({ title: 'Item needs details', description: 'Tap to add image/info' });
       }
     },
-    onError: () => {
-      toast({ title: 'Scan failed', variant: 'destructive' });
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : 'Request failed';
+      toast({ title: 'Scan failed', description: message, variant: 'destructive' });
     },
   });
 

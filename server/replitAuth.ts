@@ -19,10 +19,14 @@ const hasSupabaseConfig = Boolean(
     process.env.SUPABASE_ANON_KEY &&
     process.env.SUPABASE_SERVICE_ROLE_KEY,
 );
-const authMode = (
+const configuredAuthMode = (
   process.env.AUTH_MODE ||
     (hasSupabaseConfig ? "supabase" : hasReplitAuthConfig ? "replit" : "dev")
 ).toLowerCase();
+const authMode =
+  configuredAuthMode === "supabase" && !hasSupabaseConfig
+    ? "dev"
+    : configuredAuthMode;
 const useSupabaseAuth = authMode === "supabase";
 const useReplitAuth = authMode === "replit";
 const supabaseServiceRoleClient = useSupabaseAuth
@@ -187,6 +191,12 @@ async function upsertUser(claims: any) {
 }
 
 export async function setupAuth(app: Express) {
+  if (configuredAuthMode === "supabase" && !hasSupabaseConfig) {
+    console.warn(
+      "AUTH_MODE=supabase requested but required SUPABASE_* keys are missing. Falling back to DEV auth mode.",
+    );
+  }
+
   if (useSupabaseAuth) {
     console.info(
       "Supabase auth mode enabled; provide `Authorization: Bearer <access-token>` or `sb-access-token` cookie.",
