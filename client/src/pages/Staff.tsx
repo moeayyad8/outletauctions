@@ -259,6 +259,8 @@ export default function Staff() {
   const [barcodeValue, setBarcodeValue] = useState('');
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [newTagName, setNewTagName] = useState('');
+  const [newShelfName, setNewShelfName] = useState('');
+  const [showCreateShelfDialog, setShowCreateShelfDialog] = useState(false);
   const [newTagType, setNewTagType] = useState<'location' | 'category'>('category');
   const [isSending, setIsSending] = useState(false);
   const [selectedShelf, setSelectedShelf] = useState<number | null>(null);
@@ -416,6 +418,23 @@ export default function Staff() {
       queryClient.invalidateQueries({ queryKey: ['/api/tags'] });
       setNewTagName('');
       toast({ title: 'Tag created!' });
+    },
+  });
+
+  const createShelfMutation = useMutation({
+    mutationFn: async ({ name }: { name: string }) => {
+      const res = await apiRequest('POST', '/api/shelves', { name });
+      return res.json() as Promise<Shelf>;
+    },
+    onSuccess: (createdShelf) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/shelves'] });
+      setNewShelfName('');
+      setShowCreateShelfDialog(false);
+      setSelectedShelf(createdShelf.id);
+      toast({ title: `Shelf created (${createdShelf.code})` });
+    },
+    onError: () => {
+      toast({ title: 'Failed to create shelf', variant: 'destructive' });
     },
   });
 
@@ -1955,9 +1974,19 @@ export default function Staff() {
           <header className="pt-2">
             <div className="flex items-center justify-between mb-1">
               <h1 className="text-2xl font-bold tracking-tight">Shelves</h1>
-              <Badge variant="secondary" className="font-mono text-xs">
-                {shelves.length} shelves
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => setShowCreateShelfDialog(true)}
+                  data-testid="button-create-shelf"
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  Create Shelf
+                </Button>
+                <Badge variant="secondary" className="font-mono text-xs">
+                  {shelves.length} shelves
+                </Badge>
+              </div>
             </div>
             <p className="text-sm text-muted-foreground">Track items across shelf locations</p>
           </header>
@@ -1991,6 +2020,22 @@ export default function Staff() {
 
           {selectedShelf === null ? (
             <>
+              {shelves.length === 0 && (
+                <Card>
+                  <CardContent className="py-8 text-center space-y-3">
+                    <Archive className="w-8 h-8 mx-auto text-muted-foreground opacity-60" />
+                    <p className="text-sm text-muted-foreground">No shelves yet. Create your first shelf to start organizing inventory.</p>
+                    <Button
+                      size="sm"
+                      onClick={() => setShowCreateShelfDialog(true)}
+                      data-testid="button-create-first-shelf"
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Create Shelf
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
               <div className="grid grid-cols-4 gap-2">
                 {shelves.map((shelf) => {
                   const itemsOnShelf = auctions.filter(a => a.shelfId === shelf.id);
@@ -2293,6 +2338,49 @@ export default function Staff() {
               </Button>
               <Button variant="outline" onClick={() => setShowBarcodeDialog(false)} className="flex-1">
                 Close
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={showCreateShelfDialog}
+        onOpenChange={(open) => {
+          setShowCreateShelfDialog(open);
+          if (!open) {
+            setNewShelfName('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Create Shelf</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <Input
+              placeholder="Shelf name (e.g. Shelf A)"
+              value={newShelfName}
+              onChange={(e) => setNewShelfName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newShelfName.trim() && !createShelfMutation.isPending) {
+                  createShelfMutation.mutate({ name: newShelfName.trim() });
+                }
+              }}
+              autoFocus
+              data-testid="input-shelf-name"
+            />
+            <p className="text-xs text-muted-foreground">Shelf code is auto-generated (OAS format).</p>
+            <div className="flex gap-2">
+              <Button
+                className="flex-1"
+                onClick={() => createShelfMutation.mutate({ name: newShelfName.trim() })}
+                disabled={!newShelfName.trim() || createShelfMutation.isPending}
+                data-testid="button-confirm-create-shelf"
+              >
+                {createShelfMutation.isPending ? 'Creating...' : 'Create'}
+              </Button>
+              <Button variant="outline" className="flex-1" onClick={() => setShowCreateShelfDialog(false)}>
+                Cancel
               </Button>
             </div>
           </div>

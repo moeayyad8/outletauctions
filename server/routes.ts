@@ -3,7 +3,7 @@ import type { Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { insertBidSchema, insertWatchlistSchema, insertAuctionSchema, insertTagSchema, insertStaffSchema, insertBatchSchema } from "@shared/schema";
+import { insertBidSchema, insertWatchlistSchema, insertAuctionSchema, insertTagSchema, insertStaffSchema, insertBatchSchema, insertShelfSchema } from "@shared/schema";
 import { scanCode } from "./upcService";
 import { calculateRouting, getRoutingInputFromAuction } from "./routingService";
 import * as stripeService from "./stripeService";
@@ -458,6 +458,44 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching shelves:", error);
       res.status(500).json({ message: "Failed to fetch shelves" });
+    }
+  });
+
+  app.post('/api/shelves', async (req, res) => {
+    try {
+      const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+      if (!name) {
+        return res.status(400).json({ message: "Shelf name is required" });
+      }
+
+      const requestedCode = typeof req.body?.code === "string" ? req.body.code.trim().toUpperCase() : "";
+      let code = requestedCode;
+
+      if (!code) {
+        const existingShelves = await storage.getAllShelves();
+        let nextShelfNumber = existingShelves.length + 1;
+        while (true) {
+          const candidateCode = `OAS${nextShelfNumber.toString().padStart(2, "0")}`;
+          const existing = await storage.getShelfByCode(candidateCode);
+          if (!existing) {
+            code = candidateCode;
+            break;
+          }
+          nextShelfNumber += 1;
+        }
+      } else {
+        const existing = await storage.getShelfByCode(code);
+        if (existing) {
+          return res.status(409).json({ message: "Shelf code already exists" });
+        }
+      }
+
+      const shelfData = insertShelfSchema.parse({ name, code });
+      const shelf = await storage.createShelf(shelfData);
+      res.status(201).json(shelf);
+    } catch (error) {
+      console.error("Error creating shelf:", error);
+      res.status(400).json({ message: "Failed to create shelf" });
     }
   });
 
