@@ -433,8 +433,12 @@ export default function Staff() {
       setSelectedShelf(createdShelf.id);
       toast({ title: `Shelf created (${createdShelf.code})` });
     },
-    onError: () => {
-      toast({ title: 'Failed to create shelf', variant: 'destructive' });
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to create shelf',
+        description: error?.message ?? 'Unknown error',
+        variant: 'destructive'
+      });
     },
   });
 
