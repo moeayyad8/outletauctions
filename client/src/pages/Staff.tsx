@@ -817,20 +817,34 @@ export default function Staff() {
     
     setIsSending(true);
     let successCount = 0;
+    let failureCount = 0;
+    let lastErrorMessage = '';
     
     for (const item of batch) {
       try {
         await createAuctionMutation.mutateAsync(item);
         successCount++;
-      } catch (e) {
+      } catch (e: any) {
+        failureCount++;
+        lastErrorMessage = e?.message || 'Unknown error';
         console.error('Failed to add item:', e);
       }
     }
     
     queryClient.invalidateQueries({ queryKey: ['/api/staff/auctions'] });
     queryClient.invalidateQueries({ queryKey: ['/api/shelves'] });
-    setBatch([]);
+    if (successCount > 0) {
+      setBatch([]);
+    }
     setIsSending(false);
+    if (failureCount > 0) {
+      toast({
+        title: `Added ${successCount} item(s), failed ${failureCount}`,
+        description: lastErrorMessage,
+        variant: 'destructive'
+      });
+      return;
+    }
     toast({ title: `Added ${successCount} items to inventory!` });
   };
 
