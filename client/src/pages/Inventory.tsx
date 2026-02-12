@@ -150,21 +150,30 @@ export default function Inventory() {
     const itemsToExport = [...readyToExportItems];
     
     try {
-      await markExportedMutation.mutateAsync(ids);
-      
       const csv = generateEbayCSV(itemsToExport);
       const timestamp = new Date().toISOString().slice(0, 10);
       const timeStr = new Date().toTimeString().slice(0, 5).replace(':', '-');
       downloadCSV(csv, `ebay-draft-listings-${timestamp}-${timeStr}.csv`);
+
+      try {
+        await markExportedMutation.mutateAsync(ids);
+      } catch (markError: any) {
+        toast({
+          title: `CSV downloaded (${itemCount} items)`,
+          description: `Could not mark exported status: ${markError?.message || 'Unknown error'}`,
+          variant: 'destructive'
+        });
+        return;
+      }
       
       toast({ 
         title: `Exported ${itemCount} items`, 
         description: 'Upload the CSV to eBay, then click "Mark as Listed"' 
       });
-    } catch (error) {
+    } catch (error: any) {
       toast({ 
         title: 'Export failed', 
-        description: 'Could not mark items as exported. Please try again.',
+        description: error?.message || 'Could not generate CSV. Please try again.',
         variant: 'destructive' 
       });
     }
