@@ -5,7 +5,6 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { insertBidSchema, insertWatchlistSchema, insertAuctionSchema, insertTagSchema, insertStaffSchema, insertBatchSchema } from "@shared/schema";
 import { scanCode } from "./upcService";
-import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { calculateRouting, getRoutingInputFromAuction } from "./routingService";
 import * as stripeService from "./stripeService";
 
@@ -125,6 +124,7 @@ export async function registerRoutes(
 ): Promise<void> {
   await setupAuth(app);
   try {
+    const { registerObjectStorageRoutes } = await import("./replit_integrations/object_storage");
     registerObjectStorageRoutes(app);
   } catch (error) {
     console.error("Object storage routes failed to initialize; continuing without uploads:", error);

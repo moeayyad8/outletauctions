@@ -1,4 +1,5 @@
 import express, { type NextFunction, type Request, type Response } from "express";
+import { registerRoutes } from "../server/routes";
 
 declare module "http" {
   interface IncomingMessage {
@@ -21,7 +22,6 @@ async function createApiApp(): Promise<express.Express> {
   );
   app.use(express.urlencoded({ extended: false, limit: "50mb" }));
 
-  const { registerRoutes } = await import("../server/routes");
   await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
