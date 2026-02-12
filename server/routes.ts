@@ -122,6 +122,7 @@ export async function registerRoutes(
   app: Express,
   options?: { websocketServer?: Server },
 ): Promise<void> {
+  const isServerlessRuntime = Boolean(process.env.VERCEL || process.env.NOW_REGION);
   await setupAuth(app);
   try {
     const { registerObjectStorageRoutes } = await import("./replit_integrations/object_storage");
@@ -130,12 +131,14 @@ export async function registerRoutes(
     console.error("Object storage routes failed to initialize; continuing without uploads:", error);
   }
   
-  // Seed defaults if possible, but don't block API startup if this fails.
-  try {
-    await storage.seedShelves();
-    await storage.seedRoutingConfig();
-  } catch (error) {
-    console.error("Startup seed failed; continuing without blocking API routes:", error);
+  // Seed defaults in non-serverless runtime to avoid cold-start invocation crashes.
+  if (!isServerlessRuntime) {
+    try {
+      await storage.seedShelves();
+      await storage.seedRoutingConfig();
+    } catch (error) {
+      console.error("Startup seed failed; continuing without blocking API routes:", error);
+    }
   }
 
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {

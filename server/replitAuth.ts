@@ -29,6 +29,7 @@ const authMode =
     : configuredAuthMode;
 const useSupabaseAuth = authMode === "supabase";
 const useReplitAuth = authMode === "replit";
+const isServerlessRuntime = Boolean(process.env.VERCEL || process.env.NOW_REGION);
 const supabaseServiceRoleClient = useSupabaseAuth
   ? createClient(
       process.env.SUPABASE_URL!,
@@ -208,7 +209,13 @@ export async function setupAuth(app: Express) {
     console.warn(
       "Running in DEV auth mode. Set AUTH_MODE=replit with REPL_ID, SESSION_SECRET, and DATABASE_URL for Replit OIDC.",
     );
-    await ensureFallbackUser();
+    if (!isServerlessRuntime) {
+      try {
+        await ensureFallbackUser();
+      } catch (error) {
+        console.error("Fallback user upsert failed; continuing in DEV auth mode:", error);
+      }
+    }
     app.use((req: any, _res, next) => {
       req.user = {
         claims: fallbackClaims,
@@ -297,7 +304,13 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
   }
 
   if (!useReplitAuth) {
-    await ensureFallbackUser();
+    if (!isServerlessRuntime) {
+      try {
+        await ensureFallbackUser();
+      } catch (error) {
+        console.error("Fallback user upsert failed in auth middleware:", error);
+      }
+    }
     (req as any).user = {
       claims: fallbackClaims,
       expires_at: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365,
