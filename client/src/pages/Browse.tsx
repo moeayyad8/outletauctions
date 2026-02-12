@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { apiRequest, queryClient } from '@/lib/queryClient';
+import { redirectToLogin } from '@/lib/authRedirect';
+import { supabase } from '@/lib/supabaseClient';
 
 import logoImg from '@assets/OUTLET AUCTIONS_1762736482366.png';
 import type { Auction } from '@shared/schema';
@@ -46,12 +48,22 @@ export default function Browse() {
         variant: 'destructive',
       });
       setTimeout(() => {
-        window.location.href = '/api/login';
+        redirectToLogin();
       }, 500);
       return;
     }
     setSelectedAuction(auction);
     setBidDialogOpen(true);
+  };
+
+  const handleLogout = async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
+      toast({ title: 'Signed out' });
+      return;
+    }
+    window.location.href = '/api/logout';
   };
 
   const bidMutation = useMutation({
@@ -129,7 +141,7 @@ export default function Browse() {
                 <Button
                   size="icon"
                   variant="ghost"
-                  onClick={() => window.location.href = '/api/logout'}
+                  onClick={handleLogout}
                   data-testid="button-logout"
                 >
                   <LogOut className="h-5 w-5" />
@@ -137,7 +149,7 @@ export default function Browse() {
               ) : (
                 <Button
                   size="sm"
-                  onClick={() => window.location.href = '/api/login'}
+                  onClick={redirectToLogin}
                   data-testid="button-login"
                 >
                   <LogIn className="h-4 w-4 mr-2" />

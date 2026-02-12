@@ -3,9 +3,10 @@ import { Strategy, type VerifyFunction } from "openid-client/passport";
 
 import passport from "passport";
 import session from "express-session";
-import type { Express, RequestHandler } from "express";
+import type { Express, RequestHandler, Request } from "express";
 import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
+import { createClient, type User as SupabaseUser } from "@supabase/supabase-js";
 import { storage } from "./storage";
 
 const hasReplitAuthConfig = Boolean(
@@ -13,8 +14,23 @@ const hasReplitAuthConfig = Boolean(
     process.env.SESSION_SECRET &&
     process.env.DATABASE_URL,
 );
-const authMode = (process.env.AUTH_MODE || (hasReplitAuthConfig ? "replit" : "dev")).toLowerCase();
+const hasSupabaseConfig = Boolean(
+  process.env.SUPABASE_URL &&
+    process.env.SUPABASE_ANON_KEY &&
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+);
+const authMode = (
+  process.env.AUTH_MODE ||
+    (hasSupabaseConfig ? "supabase" : hasReplitAuthConfig ? "replit" : "dev")
+).toLowerCase();
+const useSupabaseAuth = authMode === "supabase";
 const useReplitAuth = authMode === "replit";
+const supabaseServiceRoleClient = useSupabaseAuth
+  ? createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    )
+  : null;
 
 const fallbackClaims = {
   sub: process.env.DEV_USER_ID || "dev-user",
@@ -30,6 +46,92 @@ async function ensureFallbackUser() {
     fallbackUserUpsertPromise = upsertUser(fallbackClaims);
   }
   await fallbackUserUpsertPromise;
+}
+
+function decodeJwtPayload(token?: string) {
+  if (!token) return null;
+  const [_, payload] = token.split(".");
+  if (!payload) return null;
+
+  const padded = payload.padEnd(payload.length + (4 - (payload.length % 4)) % 4, "=");
+  const base64 = padded.replace(/-/g, "+").replace(/_/g, "/");
+
+  try {
+    return JSON.parse(Buffer.from(base64, "base64").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function getSupabaseTokenFromRequest(req: Request) {
+  const authHeader = req.headers.authorization;
+  if (authHeader?.toLowerCase().startsWith("bearer ")) {
+    return authHeader.substring("bearer ".length).trim();
+  }
+  const cookieHeader = req.headers.cookie;
+  if (!cookieHeader) return undefined;
+  const match = cookieHeader.match(/sb-access-token=([^;]+)/);
+  return match?.[1];
+}
+
+function buildSupabaseClaims(user: SupabaseUser, token?: string) {
+  const metadata = (user.user_metadata as Record<string, unknown>) || {};
+  const payload = decodeJwtPayload(token);
+  const expiresAt = typeof payload?.exp === "number"
+    ? payload.exp
+    : Math.floor(Date.now() / 1000) + 60 * 60;
+
+  const firstName =
+    typeof metadata.first_name === "string"
+      ? metadata.first_name
+      : typeof metadata.name === "string"
+        ? metadata.name
+        : "";
+  const lastName = typeof metadata.last_name === "string" ? metadata.last_name : "";
+  const profileImageUrl =
+    typeof metadata.profile_image_url === "string"
+      ? metadata.profile_image_url
+      : typeof metadata.avatar_url === "string"
+        ? metadata.avatar_url
+        : "";
+
+  return {
+    sub: user.id,
+    email: user.email ?? "",
+    first_name: firstName,
+    last_name: lastName,
+    profile_image_url: profileImageUrl,
+    exp: expiresAt,
+  };
+}
+
+async function ensureSupabaseUser(req: Request, token?: string) {
+  if (!token || !supabaseServiceRoleClient) {
+    return false;
+  }
+
+  const { data, error } = await supabaseServiceRoleClient.auth.getUser(token);
+  const supabaseUser = data?.user;
+  if (error || !supabaseUser) {
+    console.error("Supabase auth validation failed", error?.message);
+    return false;
+  }
+
+  const claims = buildSupabaseClaims(supabaseUser, token);
+  await storage.upsertUser({
+    id: supabaseUser.id,
+    email: supabaseUser.email ?? "",
+    firstName: claims.first_name,
+    lastName: claims.last_name,
+    profileImageUrl: claims.profile_image_url,
+  });
+
+  (req as any).user = {
+    claims,
+    access_token: token,
+    expires_at: claims.exp,
+  };
+  return true;
 }
 
 const getOidcConfig = memoize(
@@ -85,6 +187,13 @@ async function upsertUser(claims: any) {
 }
 
 export async function setupAuth(app: Express) {
+  if (useSupabaseAuth) {
+    console.info(
+      "Supabase auth mode enabled; provide `Authorization: Bearer <access-token>` or `sb-access-token` cookie.",
+    );
+    return;
+  }
+
   if (!useReplitAuth) {
     console.warn(
       "Running in DEV auth mode. Set AUTH_MODE=replit with REPL_ID, SESSION_SECRET, and DATABASE_URL for Replit OIDC.",
@@ -168,6 +277,15 @@ export async function setupAuth(app: Express) {
 }
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
+  if (useSupabaseAuth) {
+    const token = getSupabaseTokenFromRequest(req);
+    const valid = await ensureSupabaseUser(req, token);
+    if (!valid) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    return next();
+  }
+
   if (!useReplitAuth) {
     await ensureFallbackUser();
     (req as any).user = {

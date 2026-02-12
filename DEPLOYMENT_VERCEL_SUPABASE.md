@@ -20,6 +20,10 @@
 - Create a project.
 - Use Supabase Postgres connection string as `DATABASE_URL` (or `SUPABASE_DB_URL`).
 - Run schema push from your machine or CI: `npm run db:push`.
+- Switch the backend to Supabase auth once the database is ready:
+  - Set `AUTH_MODE=supabase`.
+  - Provide the Supabase client config (`SUPABASE_URL`, `SUPABASE_ANON_KEY`) plus the service role key (`SUPABASE_SERVICE_ROLE_KEY`) so the server can verify tokens.
+  - Mirror the public values as `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` so the React login form can talk to Supabase directly.
 
 3. Stripe (if payments stay enabled)
 - Required env vars: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`.
@@ -45,8 +49,13 @@
 ## Vercel environment variables (minimum)
 
 - `DATABASE_URL`
-- `SESSION_SECRET`
-- `AUTH_MODE` (`dev` for now)
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `AUTH_MODE` (switch to `supabase` once the tokens are live; defaults to `dev` for local testing)
+- `SESSION_SECRET` (only required when `AUTH_MODE` is `replit` or `dev`)
 - `DEV_USER_ID`
 - `DEV_USER_EMAIL`
 - `STRIPE_SECRET_KEY` (if payments enabled)
