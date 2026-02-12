@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Package, MapPin, Clock, Volume2, VolumeX, Trash2 } from "lucide-react";
-import type { Auction } from "@shared/schema";
+import type { Auction, Shelf } from "@shared/schema";
 
 interface ScannedItem {
   id: number;
@@ -17,63 +17,84 @@ export default function LiveView() {
   const [items, setItems] = useState<ScannedItem[]>([]);
   const [connected, setConnected] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const wsRef = useRef<WebSocket | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const shelfMapRef = useRef<Map<number, string>>(new Map());
+  const seenAuctionIdsRef = useRef<Set<number>>(new Set());
+  const initializedRef = useRef(false);
 
   useEffect(() => {
     audioRef.current = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1pdHx3dXJrc3N8d3t6f4CBg4GKioyQkZCMj46SkZaWl5mZmZmZmZmZmZaWlpaTkZCNi4mJhYaEgn98enl4d3Z1dHN0c3R0dHR1dnZ3d3h5ent8fn+Bg4SFh4mKi42OkJGSlJWWl5iZmZqampqamZmYl5aVlJOSkI+OjYyLioiHhoWEg4KBgH9+fXx7enl4d3Z1dHNycXBwcHBxcnN0dXZ3eHl6e3x9fn+AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpeYmJmZmpqampmZmJeWlZSTkpGQj46NjIuKiYiHhoWEg4KBgH9+fXx7enl4d3Z1dHNycXBvcG9wcHFyc3R1dnd4eXp7fH1+f4CBgoOEhYaHiImKi4yNjo+QkZKTlJWWl5iYmZmampqamZmYl5aVlJOSkZCPjo2Mi4qJiIeGhYSDgoGAf359fHt6eXh3dnV0c3JxcHBwcHFyc3R1dnd4eXp7fH1+f4CBgoOEhYaHiImKi4yNjo+QkZKTlJWWl5iYmZmampqamZmYl5aVlJOSkZCPjo2Mi4qJiIeGhQ==");
-    
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
-    
-    const connect = () => {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-      
-      ws.onopen = () => {
-        console.log("Connected to live view");
-        setConnected(true);
-      };
-      
-      ws.onclose = () => {
-        console.log("Disconnected from live view");
-        setConnected(false);
-        setTimeout(connect, 3000);
-      };
-      
-      ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
-      };
-      
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          if (message.type === "new_scan") {
-            const newItem: ScannedItem = {
-              id: Date.now(),
-              auction: message.data.auction,
-              shelfCode: message.data.shelfCode,
-              timestamp: new Date(),
-              shelved: false
-            };
-            setItems(prev => [newItem, ...prev].slice(0, 50));
-            
-            if (soundEnabled && audioRef.current) {
-              audioRef.current.play().catch(() => {});
-            }
-          }
-        } catch (err) {
-          console.error("Error parsing message:", err);
-        }
-      };
-    };
-    
-    connect();
-    
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
+
+    let disposed = false;
+
+    const loadShelves = async () => {
+      try {
+        const res = await fetch("/api/shelves");
+        if (!res.ok) return;
+        const shelves: Shelf[] = await res.json();
+        shelfMapRef.current = new Map(shelves.map((s) => [s.id, s.code]));
+      } catch (error) {
+        console.error("Failed to load shelves:", error);
       }
+    };
+
+    const pollScans = async () => {
+      try {
+        const res = await fetch("/api/staff/auctions");
+        if (!res.ok) {
+          setConnected(false);
+          return;
+        }
+        const auctions: Auction[] = await res.json();
+        const seen = seenAuctionIdsRef.current;
+
+        if (!initializedRef.current) {
+          auctions.forEach((a) => seen.add(a.id));
+          initializedRef.current = true;
+          setConnected(true);
+          return;
+        }
+
+        const newAuctions = auctions
+          .filter((a) => !seen.has(a.id))
+          .sort((a, b) => {
+            const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return bTime - aTime;
+          });
+
+        if (newAuctions.length > 0) {
+          newAuctions.forEach((a) => seen.add(a.id));
+          const newItems: ScannedItem[] = newAuctions.map((auction) => ({
+            id: Date.now() + auction.id,
+            auction,
+            shelfCode: auction.shelfId
+              ? shelfMapRef.current.get(auction.shelfId) || "Unknown"
+              : "Unknown",
+            timestamp: auction.createdAt ? new Date(auction.createdAt) : new Date(),
+            shelved: false,
+          }));
+          if (!disposed) {
+            setItems((prev) => [...newItems, ...prev].slice(0, 50));
+          }
+          if (soundEnabled && audioRef.current) {
+            audioRef.current.play().catch(() => {});
+          }
+        }
+
+        setConnected(true);
+      } catch (error) {
+        console.error("Live polling failed:", error);
+        setConnected(false);
+      }
+    };
+
+    void loadShelves().then(() => pollScans());
+    const intervalId = window.setInterval(pollScans, 5000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
     };
   }, [soundEnabled]);
 

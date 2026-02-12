@@ -8,6 +8,30 @@ import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 
+const hasReplitAuthConfig = Boolean(
+  process.env.REPL_ID &&
+    process.env.SESSION_SECRET &&
+    process.env.DATABASE_URL,
+);
+const authMode = (process.env.AUTH_MODE || (hasReplitAuthConfig ? "replit" : "dev")).toLowerCase();
+const useReplitAuth = authMode === "replit";
+
+const fallbackClaims = {
+  sub: process.env.DEV_USER_ID || "dev-user",
+  email: process.env.DEV_USER_EMAIL || "dev@example.com",
+  first_name: process.env.DEV_USER_FIRST_NAME || "Dev",
+  last_name: process.env.DEV_USER_LAST_NAME || "User",
+};
+
+let fallbackUserUpsertPromise: Promise<void> | null = null;
+
+async function ensureFallbackUser() {
+  if (!fallbackUserUpsertPromise) {
+    fallbackUserUpsertPromise = upsertUser(fallbackClaims);
+  }
+  await fallbackUserUpsertPromise;
+}
+
 const getOidcConfig = memoize(
   async () => {
     return await client.discovery(
@@ -61,6 +85,21 @@ async function upsertUser(claims: any) {
 }
 
 export async function setupAuth(app: Express) {
+  if (!useReplitAuth) {
+    console.warn(
+      "Running in DEV auth mode. Set AUTH_MODE=replit with REPL_ID, SESSION_SECRET, and DATABASE_URL for Replit OIDC.",
+    );
+    await ensureFallbackUser();
+    app.use((req: any, _res, next) => {
+      req.user = {
+        claims: fallbackClaims,
+        expires_at: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365,
+      };
+      next();
+    });
+    return;
+  }
+
   app.set("trust proxy", 1);
   app.use(getSession());
   app.use(passport.initialize());
@@ -129,6 +168,15 @@ export async function setupAuth(app: Express) {
 }
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
+  if (!useReplitAuth) {
+    await ensureFallbackUser();
+    (req as any).user = {
+      claims: fallbackClaims,
+      expires_at: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365,
+    };
+    return next();
+  }
+
   const user = req.user as any;
 
   if (!req.isAuthenticated() || !user.expires_at) {

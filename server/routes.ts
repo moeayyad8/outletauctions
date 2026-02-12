@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import { createServer, type Server } from "http";
+import type { Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
@@ -119,7 +119,10 @@ async function processBatchPayments(): Promise<{
   return result;
 }
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export async function registerRoutes(
+  app: Express,
+  options?: { websocketServer?: Server },
+): Promise<void> {
   await setupAuth(app);
   registerObjectStorageRoutes(app);
   
@@ -954,14 +957,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Update batch totalItems count
       if (item.batchId) {
-        await storage.incrementBatchItemCount(item.batchId);
+        await storage.incrementBatchItems(item.batchId, item.cost || 200);
       }
       
       // Update staff shift scan count
       if (item.scannedByStaffId) {
         const activeShift = await storage.getActiveShift(item.scannedByStaffId);
         if (activeShift) {
-          await storage.incrementShiftScanCount(activeShift.id);
+          await storage.incrementShiftScans(activeShift.id);
         }
       }
       
@@ -1587,25 +1590,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const httpServer = createServer(app);
-  
-  // Set up WebSocket server for live view
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
-  
-  wss.on('connection', (ws) => {
-    console.log('Live view client connected');
-    wsClients.add(ws);
-    
-    ws.on('close', () => {
-      console.log('Live view client disconnected');
-      wsClients.delete(ws);
+  if (options?.websocketServer) {
+    // WebSockets require a persistent Node server and are disabled in serverless mode.
+    const wss = new WebSocketServer({ server: options.websocketServer, path: '/ws' });
+
+    wss.on('connection', (ws) => {
+      console.log('Live view client connected');
+      wsClients.add(ws);
+
+      ws.on('close', () => {
+        console.log('Live view client disconnected');
+        wsClients.delete(ws);
+      });
+
+      ws.on('error', (error) => {
+        console.error('WebSocket error:', error);
+        wsClients.delete(ws);
+      });
     });
-    
-    ws.on('error', (error) => {
-      console.error('WebSocket error:', error);
-      wsClients.delete(ws);
-    });
-  });
-  
-  return httpServer;
+  }
 }
