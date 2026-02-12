@@ -124,7 +124,11 @@ export async function registerRoutes(
   options?: { websocketServer?: Server },
 ): Promise<void> {
   await setupAuth(app);
-  registerObjectStorageRoutes(app);
+  try {
+    registerObjectStorageRoutes(app);
+  } catch (error) {
+    console.error("Object storage routes failed to initialize; continuing without uploads:", error);
+  }
   
   // Seed defaults if possible, but don't block API startup if this fails.
   try {

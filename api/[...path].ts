@@ -34,9 +34,18 @@ async function createApiApp(): Promise<express.Express> {
 }
 
 export default async function handler(req: Request, res: Response) {
-  if (!appPromise) {
-    appPromise = createApiApp();
+  try {
+    if (!appPromise) {
+      appPromise = createApiApp();
+    }
+    const app = await appPromise;
+    return app(req, res);
+  } catch (error: any) {
+    console.error("API bootstrap failed:", error);
+    appPromise = null;
+    return res.status(500).json({
+      message: "API bootstrap failed",
+      error: error?.message || "Unknown error",
+    });
   }
-  const app = await appPromise;
-  return app(req, res);
 }
