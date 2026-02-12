@@ -1,6 +1,32 @@
-import { eq } from "drizzle-orm";
-import { db } from "../server/db";
-import { insertShelfSchema, shelves } from "@shared/schema";
+import { Pool, neonConfig } from "@neondatabase/serverless";
+import ws from "ws";
+
+neonConfig.webSocketConstructor = ws;
+
+type ShelfRow = {
+  id: number;
+  name: string;
+  code: string;
+  item_count: number;
+  created_at: string | null;
+};
+
+let pool: Pool | null = null;
+
+function getConnectionString(): string | null {
+  return process.env.DATABASE_URL || process.env.SUPABASE_DB_URL || null;
+}
+
+function getPool(): Pool {
+  if (!pool) {
+    const connectionString = getConnectionString();
+    if (!connectionString) {
+      throw new Error("DATABASE_URL or SUPABASE_DB_URL is required");
+    }
+    pool = new Pool({ connectionString });
+  }
+  return pool;
+}
 
 function getBody(req: any): Record<string, unknown> {
   if (!req?.body) return {};
@@ -15,11 +41,25 @@ function getBody(req: any): Record<string, unknown> {
   return {};
 }
 
+function normalizeShelf(row: ShelfRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    code: row.code,
+    itemCount: row.item_count,
+    createdAt: row.created_at,
+  };
+}
+
 export default async function handler(req: any, res: any) {
   try {
+    const db = getPool();
+
     if (req.method === "GET") {
-      const allShelves = await db.select().from(shelves).orderBy(shelves.id);
-      return res.status(200).json(allShelves);
+      const result = await db.query<ShelfRow>(
+        "SELECT id, name, code, item_count, created_at FROM shelves ORDER BY id",
+      );
+      return res.status(200).json(result.rows.map(normalizeShelf));
     }
 
     if (req.method !== "POST") {
@@ -33,27 +73,33 @@ export default async function handler(req: any, res: any) {
     }
 
     const requestedCode = typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
+    const name = rawName.slice(0, 50);
+    let code = requestedCode.slice(0, 10);
 
-    const allShelves = await db.select().from(shelves).orderBy(shelves.id);
-    const existingCodes = new Set(allShelves.map((s) => s.code.toUpperCase()));
-
-    let code = requestedCode;
     if (!code) {
-      let nextShelfNumber = allShelves.length + 1;
+      const allShelves = await db.query<{ code: string }>("SELECT code FROM shelves");
+      const existingCodes = new Set(allShelves.rows.map((r) => r.code.toUpperCase()));
+      let nextShelfNumber = allShelves.rows.length + 1;
       while (existingCodes.has(`OAS${nextShelfNumber.toString().padStart(2, "0")}`)) {
         nextShelfNumber += 1;
       }
       code = `OAS${nextShelfNumber.toString().padStart(2, "0")}`;
     } else {
-      const existing = await db.select().from(shelves).where(eq(shelves.code, code)).limit(1);
-      if (existing.length > 0) {
+      const exists = await db.query<{ id: number }>(
+        "SELECT id FROM shelves WHERE UPPER(code) = UPPER($1) LIMIT 1",
+        [code],
+      );
+      if (exists.rowCount && exists.rowCount > 0) {
         return res.status(409).json({ message: "Shelf code already exists" });
       }
     }
 
-    const shelfData = insertShelfSchema.parse({ name: rawName, code });
-    const [created] = await db.insert(shelves).values(shelfData).returning();
-    return res.status(201).json(created);
+    const created = await db.query<ShelfRow>(
+      "INSERT INTO shelves (name, code) VALUES ($1, $2) RETURNING id, name, code, item_count, created_at",
+      [name, code],
+    );
+
+    return res.status(201).json(normalizeShelf(created.rows[0]));
   } catch (error: any) {
     console.error("Shelves API error:", error);
     return res.status(500).json({
