@@ -10,14 +10,11 @@
   },
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/[...path]"
-    },
-    {
       "handle": "filesystem"
     },
     {
       "src": "/(.*)",
+      "methods": ["GET", "HEAD"],
       "dest": "/index.html"
     }
   ]
