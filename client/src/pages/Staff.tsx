@@ -45,6 +45,7 @@ type ItemCondition = "new" | "like_new" | "good" | "acceptable" | "parts_damaged
 
 interface BatchItem extends ScanResult {
   customImage: string | null;
+  customImages: string[];
   selectedTags: number[];
   id: string;
   destination: DestinationType;
@@ -366,16 +367,13 @@ export default function Staff() {
     ctx.drawImage(video, -vw / 2, -vh / 2);
     ctx.restore();
     
-    // Store itemId in ref before async operations to avoid closure issues
     const itemId = cameraItemId;
-    editingItemRef.current = itemId;
-    setEditingItem(itemId);
     
     canvas.toBlob(async (blob) => {
       if (!blob) return;
       const file = new File([blob], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
       closeCamera();
-      await uploadFile(file);
+      await uploadFilesForItem(itemId, [file]);
     }, 'image/jpeg', 0.9);
   };
 
@@ -463,25 +461,43 @@ export default function Staff() {
     }
   }, [showBarcodeDialog, barcodeValue]);
 
-  const { uploadFile, isUploading } = useUpload({
-    onSuccess: (response) => {
-      // Use ref to get current editingItem to avoid closure issues
-      const itemId = editingItemRef.current;
-      if (itemId) {
-        setBatch(prev => prev.map(item => 
-          item.id === itemId ? { ...item, customImage: response.objectPath } : item
-        ));
-        editingItemRef.current = null;
-        setEditingItem(null);
+  const { uploadFile, isUploading } = useUpload();
+
+  const addUploadedImageToItem = (itemId: string, imageUrl: string) => {
+    setBatch(prev => prev.map(item => {
+      if (item.id !== itemId) return item;
+      const existing = item.customImages && item.customImages.length > 0
+        ? item.customImages
+        : (item.customImage ? [item.customImage] : []);
+      const customImages = [...existing, imageUrl];
+      return { ...item, customImages, customImage: customImages[0] ?? null };
+    }));
+  };
+
+  const uploadFilesForItem = async (itemId: string, files: File[]) => {
+    if (files.length === 0) return;
+
+    setEditingItem(itemId);
+    editingItemRef.current = itemId;
+
+    let uploaded = 0;
+    for (const file of files) {
+      const response = await uploadFile(file);
+      if (response?.objectPath) {
+        addUploadedImageToItem(itemId, response.objectPath);
+        uploaded++;
       }
-      toast({ title: 'Image uploaded!' });
-    },
-    onError: () => {
-      toast({ title: 'Failed to upload image', variant: 'destructive' });
-      editingItemRef.current = null;
-      setEditingItem(null);
     }
-  });
+
+    setEditingItem(null);
+    editingItemRef.current = null;
+
+    if (uploaded > 0) {
+      toast({ title: `Uploaded ${uploaded} photo${uploaded > 1 ? 's' : ''}` });
+    } else {
+      toast({ title: 'Failed to upload image', variant: 'destructive' });
+    }
+  };
 
   const scanMutation = useMutation({
     mutationFn: async (codeToScan: string) => {
@@ -497,6 +513,7 @@ export default function Staff() {
       const newItem: BatchItem = {
         ...scanData,
         customImage: null,
+        customImages: [],
         selectedTags: [],
         id: `${scanData.code}-${Date.now()}`,
         destination: defaults.destination,
@@ -545,6 +562,7 @@ export default function Staff() {
         category: null,
         highestPrice: null,
         customImage: null,
+        customImages: [],
         selectedTags: [],
         id: `${codeData.code}-${Date.now()}`,
         destination: defaults.destination,
@@ -656,11 +674,14 @@ export default function Staff() {
 
   const createAuctionMutation = useMutation({
     mutationFn: async (item: BatchItem) => {
+      const allImages = item.customImages.length > 0
+        ? item.customImages
+        : (item.customImage ? [item.customImage] : (item.image ? [item.image] : []));
       const auctionData = {
         upc: item.code,
         title: item.title,
         description: item.brand ? `Brand: ${item.brand}` : null,
-        image: item.customImage || item.image,
+        image: allImages[0] || null,
         brand: item.brand,
         category: item.category,
         retailPrice: item.highestPrice ? Math.round(item.highestPrice * 100) : null,
@@ -674,6 +695,7 @@ export default function Staff() {
         stockQuantity: item.stockQuantity,
         showOnHomepage: item.showOnHomepage ? 1 : 0,
         scannedByStaffId: loggedInStaffRef.current?.id || null,
+        externalPayload: allImages.length > 0 ? { images: allImages } : null,
       };
       const response = await apiRequest('POST', '/api/staff/auctions', auctionData);
       const auction = await response.json();
@@ -891,11 +913,11 @@ export default function Staff() {
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, itemId: string) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setEditingItem(itemId);
-      await uploadFile(file);
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length > 0) {
+      await uploadFilesForItem(itemId, files);
     }
+    e.currentTarget.value = '';
   };
 
   // Show login screen if not authenticated
@@ -1237,13 +1259,18 @@ export default function Staff() {
                     <CardContent className="p-0">
                       <div className="flex">
                         <div className="w-24 h-24 bg-muted flex items-center justify-center shrink-0 relative group">
-                          {(item.customImage || item.image) ? (
+                          {(item.customImages[0] || item.customImage || item.image) ? (
                             <>
                               <img 
-                                src={item.customImage || item.image!} 
+                                src={item.customImages[0] || item.customImage || item.image!} 
                                 alt={item.title}
                                 className="w-full h-full object-cover"
                               />
+                              {item.customImages.length > 1 && (
+                                <Badge className="absolute top-1 right-1 text-[10px] px-1.5 py-0">
+                                  {item.customImages.length}
+                                </Badge>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => openCamera(item.id)}
@@ -1372,6 +1399,30 @@ export default function Staff() {
                                 </SelectContent>
                               </Select>
                             </div>
+                          </div>
+
+                          <div className="mt-2">
+                            <input
+                              id={`upload-images-${item.id}`}
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              className="hidden"
+                              onChange={(e) => handleImageUpload(e, item.id)}
+                            />
+                            <label
+                              htmlFor={`upload-images-${item.id}`}
+                              className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md border text-xs cursor-pointer hover:bg-muted"
+                              data-testid={`button-upload-images-${item.id}`}
+                            >
+                              <ImagePlus className="w-3 h-3" />
+                              Add Photos
+                            </label>
+                            {item.customImages.length > 0 && (
+                              <span className="ml-2 text-[10px] text-muted-foreground">
+                                {item.customImages.length} uploaded
+                              </span>
+                            )}
                           </div>
                           
                           <div className="grid grid-cols-3 gap-1 mt-2 pt-2 border-t">

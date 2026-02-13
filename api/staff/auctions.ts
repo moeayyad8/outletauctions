@@ -180,16 +180,20 @@ export default async function handler(req: any, res: any) {
     const scannedByStaffId =
       typeof body.scannedByStaffId === "number" ? body.scannedByStaffId : null;
     const showOnHomepage = body.showOnHomepage === 1 ? 1 : 0;
+    const externalPayload =
+      typeof body.externalPayload === "object" && body.externalPayload !== null
+        ? body.externalPayload
+        : null;
 
     const created = await db.query<AuctionRow>(
       `INSERT INTO auctions (
         internal_code, upc, title, description, image, brand, category, retail_price,
         starting_bid, status, destination, shelf_id, condition, weight_class, brand_tier,
-        stock_quantity, scanned_by_staff_id, show_on_homepage
+        stock_quantity, scanned_by_staff_id, show_on_homepage, external_payload
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,
         $9,$10,$11,$12,$13,$14,$15,
-        $16,$17,$18
+        $16,$17,$18,$19
       )
       RETURNING *`,
       [
@@ -211,6 +215,7 @@ export default async function handler(req: any, res: any) {
         stockQuantity,
         scannedByStaffId,
         showOnHomepage,
+        externalPayload,
       ],
     );
 
