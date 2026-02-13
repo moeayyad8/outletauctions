@@ -43,7 +43,7 @@ type BrandTier = "A" | "B" | "C";
 type WeightClass = "light" | "medium" | "heavy";
 type ItemCondition = "new" | "like_new" | "good" | "acceptable" | "parts_damaged";
 type InventoryLocation = "bins" | "things" | "flatrate";
-type ShelfLocation = "bins" | "things";
+type ShelfLocation = "bins" | "things" | "flatrate";
 
 interface BatchItem extends ScanResult {
   customImage: string | null;
@@ -265,8 +265,6 @@ export default function Staff() {
   const [barcodeValue, setBarcodeValue] = useState('');
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [newTagName, setNewTagName] = useState('');
-  const [newShelfName, setNewShelfName] = useState('');
-  const [showCreateShelfDialog, setShowCreateShelfDialog] = useState(false);
   const [newTagType, setNewTagType] = useState<'location' | 'category'>('category');
   const [isSending, setIsSending] = useState(false);
   const [selectedShelf, setSelectedShelf] = useState<number | null>(null);
@@ -414,13 +412,15 @@ export default function Staff() {
   const getShelfLocation = (shelf: Shelf): ShelfLocation | null => {
     if (shelf.code.startsWith('BIN')) return 'bins';
     if (shelf.code.startsWith('THG')) return 'things';
+    if (shelf.code.startsWith('FLT')) return 'flatrate';
     return null;
   };
 
   const getShelvesForLocation = (location: InventoryLocation): Shelf[] => {
     if (location === 'bins') return shelves.filter((s) => getShelfLocation(s) === 'bins');
     if (location === 'things') return shelves.filter((s) => getShelfLocation(s) === 'things');
-    return [];
+    if (location === 'flatrate') return shelves.filter((s) => getShelfLocation(s) === 'flatrate');
+    return shelves;
   };
 
   const getAuctionInventoryLocation = (auction: Auction): InventoryLocation | 'unassigned' => {
@@ -446,14 +446,12 @@ export default function Staff() {
   });
 
   const createShelfMutation = useMutation({
-    mutationFn: async ({ name }: { name: string }) => {
-      const res = await apiRequest('POST', '/api/shelves', { name });
+    mutationFn: async (location: ShelfLocation) => {
+      const res = await apiRequest('POST', '/api/shelves', { location });
       return res.json() as Promise<Shelf>;
     },
     onSuccess: (createdShelf) => {
       queryClient.invalidateQueries({ queryKey: ['/api/shelves'] });
-      setNewShelfName('');
-      setShowCreateShelfDialog(false);
       setSelectedShelf(createdShelf.id);
       toast({ title: `Shelf created (${createdShelf.code})` });
     },
@@ -882,7 +880,7 @@ export default function Staff() {
   const handleSendToInventory = async () => {
     if (batch.length === 0) return;
     
-    const itemsWithoutShelf = batch.filter(item => item.inventoryLocation !== 'flatrate' && !item.shelfId);
+    const itemsWithoutShelf = batch.filter(item => !item.shelfId);
     if (itemsWithoutShelf.length > 0) {
       toast({ 
         title: 'Select location for all items', 
@@ -1175,7 +1173,6 @@ export default function Staff() {
               <Select
                 value={scanDefaults.shelfId?.toString() || 'none'}
                 onValueChange={(val) => updateScanDefaults({ shelfId: val === 'none' ? null : parseInt(val) })}
-                disabled={scanDefaults.inventoryLocation === 'flatrate'}
               >
                 <SelectTrigger className="h-9" data-testid="select-default-shelf">
                   <MapPin className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
@@ -1456,10 +1453,9 @@ export default function Staff() {
                               <Select
                                 value={item.shelfId?.toString() || ''}
                                 onValueChange={(val) => setItemShelf(item.id, val ? parseInt(val) : null)}
-                                disabled={item.inventoryLocation === 'flatrate'}
                               >
                                 <SelectTrigger 
-                                  className={`w-[110px] h-7 text-xs ${item.inventoryLocation !== 'flatrate' && !item.shelfId ? 'border-orange-400 text-orange-600' : ''}`}
+                                  className={`w-[110px] h-7 text-xs ${!item.shelfId ? 'border-orange-400 text-orange-600' : ''}`}
                                   data-testid={`select-shelf-${item.id}`}
                                 >
                                   <MapPin className="w-3 h-3 mr-1" />
@@ -2135,14 +2131,25 @@ export default function Staff() {
           <header className="pt-2">
             <div className="flex items-center justify-between mb-1">
               <h1 className="text-2xl font-bold tracking-tight">Shelves</h1>
-              <Badge variant="secondary" className="font-mono text-xs">
-                {shelvesForShelvesTab.length} shelves
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => createShelfMutation.mutate(shelfLocation)}
+                  disabled={createShelfMutation.isPending}
+                  data-testid="button-generate-shelf"
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  {createShelfMutation.isPending ? 'Generating...' : 'Generate Shelf'}
+                </Button>
+                <Badge variant="secondary" className="font-mono text-xs">
+                  {shelvesForShelvesTab.length} shelves
+                </Badge>
+              </div>
             </div>
             <p className="text-sm text-muted-foreground">Track items across shelf locations</p>
           </header>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <Button
               variant={shelfLocation === 'bins' ? 'default' : 'outline'}
               onClick={() => {
@@ -2151,7 +2158,7 @@ export default function Staff() {
               }}
               data-testid="button-shelves-location-bins"
             >
-              Bins (1-32)
+              Bins
             </Button>
             <Button
               variant={shelfLocation === 'things' ? 'default' : 'outline'}
@@ -2161,7 +2168,17 @@ export default function Staff() {
               }}
               data-testid="button-shelves-location-things"
             >
-              Things (1-32)
+              Things
+            </Button>
+            <Button
+              variant={shelfLocation === 'flatrate' ? 'default' : 'outline'}
+              onClick={() => {
+                setShelfLocation('flatrate');
+                setSelectedShelf(null);
+              }}
+              data-testid="button-shelves-location-flatrate"
+            >
+              Flatrate
             </Button>
           </div>
 
@@ -2171,7 +2188,13 @@ export default function Staff() {
                 <div className="relative flex-1">
                   <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    placeholder={shelfLocation === 'bins' ? "Scan shelf barcode (BINXX)..." : "Scan shelf barcode (THGXX)..."}
+                    placeholder={
+                      shelfLocation === 'bins'
+                        ? "Scan shelf barcode (BINXX)..."
+                        : shelfLocation === 'things'
+                          ? "Scan shelf barcode (THGXX)..."
+                          : "Scan shelf barcode (FLTXX)..."
+                    }
                     className="pl-9"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
@@ -2511,49 +2534,6 @@ export default function Staff() {
               </Button>
               <Button variant="outline" onClick={() => setShowBarcodeDialog(false)} className="flex-1">
                 Close
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={showCreateShelfDialog}
-        onOpenChange={(open) => {
-          setShowCreateShelfDialog(open);
-          if (!open) {
-            setNewShelfName('');
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Create Shelf</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <Input
-              placeholder="Shelf name (e.g. Shelf A)"
-              value={newShelfName}
-              onChange={(e) => setNewShelfName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && newShelfName.trim() && !createShelfMutation.isPending) {
-                  createShelfMutation.mutate({ name: newShelfName.trim() });
-                }
-              }}
-              autoFocus
-              data-testid="input-shelf-name"
-            />
-            <p className="text-xs text-muted-foreground">Shelf code is auto-generated (OAS format).</p>
-            <div className="flex gap-2">
-              <Button
-                className="flex-1"
-                onClick={() => createShelfMutation.mutate({ name: newShelfName.trim() })}
-                disabled={!newShelfName.trim() || createShelfMutation.isPending}
-                data-testid="button-confirm-create-shelf"
-              >
-                {createShelfMutation.isPending ? 'Creating...' : 'Create'}
-              </Button>
-              <Button variant="outline" className="flex-1" onClick={() => setShowCreateShelfDialog(false)}>
-                Cancel
               </Button>
             </div>
           </div>

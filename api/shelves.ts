@@ -10,6 +10,7 @@ type ShelfRow = {
   item_count: number;
   created_at: string | null;
 };
+type ShelfLocation = "bins" | "things" | "flatrate";
 
 let pool: Pool | null = null;
 
@@ -60,11 +61,15 @@ async function ensureLocationShelves(db: Pool) {
     const suffix = i.toString().padStart(2, "0");
     const binsCode = `BIN${suffix}`;
     const thingsCode = `THG${suffix}`;
+    const flatrateCode = `FLT${suffix}`;
     if (!existingCodes.has(binsCode)) {
       inserts.push({ name: `Bins Shelf ${i}`, code: binsCode });
     }
     if (!existingCodes.has(thingsCode)) {
       inserts.push({ name: `Things Shelf ${i}`, code: thingsCode });
+    }
+    if (!existingCodes.has(flatrateCode)) {
+      inserts.push({ name: `Flatrate Shelf ${i}`, code: flatrateCode });
     }
   }
 
@@ -73,6 +78,12 @@ async function ensureLocationShelves(db: Pool) {
   for (const row of inserts) {
     await db.query("INSERT INTO shelves (name, code) VALUES ($1, $2)", [row.name, row.code]);
   }
+}
+
+function getLocationMeta(location: ShelfLocation): { prefix: string; label: string } {
+  if (location === "bins") return { prefix: "BIN", label: "Bins" };
+  if (location === "things") return { prefix: "THG", label: "Things" };
+  return { prefix: "FLT", label: "Flatrate" };
 }
 
 export default async function handler(req: any, res: any) {
@@ -92,23 +103,37 @@ export default async function handler(req: any, res: any) {
     }
 
     const body = getBody(req);
+    const requestedLocation =
+      body.location === "bins" || body.location === "things" || body.location === "flatrate"
+        ? (body.location as ShelfLocation)
+        : null;
     const rawName = typeof body.name === "string" ? body.name.trim() : "";
-    if (!rawName) {
-      return res.status(400).json({ message: "Shelf name is required" });
-    }
 
     const requestedCode = typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
-    const name = rawName.slice(0, 50);
+    let name = rawName.slice(0, 50);
     let code = requestedCode.slice(0, 10);
 
-    if (!code) {
-      const allShelves = await db.query<{ code: string }>("SELECT code FROM shelves");
-      const existingCodes = new Set(allShelves.rows.map((r) => r.code.toUpperCase()));
-      let nextShelfNumber = allShelves.rows.length + 1;
-      while (existingCodes.has(`OAS${nextShelfNumber.toString().padStart(2, "0")}`)) {
-        nextShelfNumber += 1;
+    if (requestedLocation) {
+      const { prefix, label } = getLocationMeta(requestedLocation);
+      const rows = await db.query<{ code: string }>(
+        "SELECT code FROM shelves WHERE UPPER(code) LIKE UPPER($1)",
+        [`${prefix}%`],
+      );
+
+      let maxNumber = 0;
+      for (const row of rows.rows) {
+        const parsed = Number.parseInt(row.code.slice(prefix.length), 10);
+        if (Number.isFinite(parsed) && parsed > maxNumber) {
+          maxNumber = parsed;
+        }
       }
-      code = `OAS${nextShelfNumber.toString().padStart(2, "0")}`;
+      const nextNumber = maxNumber + 1;
+      code = `${prefix}${nextNumber.toString().padStart(2, "0")}`;
+      if (!name) {
+        name = `${label} Shelf ${nextNumber}`;
+      }
+    } else if (!code) {
+      return res.status(400).json({ message: "location or code is required" });
     } else {
       const exists = await db.query<{ id: number }>(
         "SELECT id FROM shelves WHERE UPPER(code) = UPPER($1) LIMIT 1",
@@ -117,6 +142,13 @@ export default async function handler(req: any, res: any) {
       if (exists.rowCount && exists.rowCount > 0) {
         return res.status(409).json({ message: "Shelf code already exists" });
       }
+      if (!name) {
+        name = code;
+      }
+    }
+
+    if (!name) {
+      return res.status(400).json({ message: "Shelf name is required" });
     }
 
     const created = await db.query<ShelfRow>(
