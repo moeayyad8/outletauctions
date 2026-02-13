@@ -280,14 +280,37 @@ export default function Inventory() {
         throw new Error('Invalid backup file format');
       }
       
-      const response = await apiRequest('POST', '/api/admin/import', { data: importData.data });
-      const result = await response.json();
-      
+      const auctions = Array.isArray(importData.data.auctions) ? importData.data.auctions : [];
+      const shelves = Array.isArray(importData.data.shelves) ? importData.data.shelves : [];
+      const tags = Array.isArray(importData.data.tags) ? importData.data.tags : [];
+      const chunkSize = 75;
+
+      let totalImported = 0;
+      let totalSkipped = 0;
+
+      for (let i = 0; i < auctions.length; i += chunkSize) {
+        const chunk = auctions.slice(i, i + chunkSize);
+        const response = await apiRequest('POST', '/api/admin/import', {
+          data: {
+            auctions: chunk,
+            shelves: i === 0 ? shelves : [],
+            tags: i === 0 ? tags : [],
+          },
+          options: {
+            importShelves: i === 0,
+            importTags: i === 0,
+          },
+        });
+        const result = await response.json();
+        totalImported += result?.imported?.auctions ?? 0;
+        totalSkipped += result?.imported?.skipped ?? 0;
+      }
+
       queryClient.invalidateQueries({ queryKey: ['/api/staff/auctions'] });
       
       toast({ 
-        title: result.message,
-        description: 'Data imported successfully'
+        title: `Imported ${totalImported} items`,
+        description: totalSkipped > 0 ? `${totalSkipped} skipped as duplicates/invalid` : 'Data imported successfully'
       });
     } catch (error) {
       toast({ 
