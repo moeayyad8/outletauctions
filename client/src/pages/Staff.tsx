@@ -1034,7 +1034,7 @@ export default function Staff() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-28">
       {activeTab === 'scanner' && (
         <div className="max-w-2xl mx-auto p-4 space-y-6">
           <header className="pt-2">
@@ -2419,9 +2419,52 @@ export default function Staff() {
           )}
         </div>
       )}
-      {/* Bottom Tab Bar */}
+      {/* Bottom Navigation */}
       <div className="fixed bottom-0 left-0 right-0 bg-background border-t safe-area-pb">
-        <div className="max-w-2xl mx-auto flex">
+        <div className="max-w-2xl mx-auto">
+          <div className="grid grid-cols-5 border-b">
+            <Link
+              href="/inventory"
+              className="flex flex-col items-center gap-1 py-2 text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="nav-tool-inventory"
+            >
+              <Archive className="w-4 h-4" />
+              <span className="text-[10px] font-medium">Inventory</span>
+            </Link>
+            <Link
+              href="/value-finder"
+              className="flex flex-col items-center gap-1 py-2 text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="nav-tool-bundle-box"
+            >
+              <Scale className="w-4 h-4" />
+              <span className="text-[10px] font-medium">Bundle Box</span>
+            </Link>
+            <Link
+              href="/clothes"
+              className="flex flex-col items-center gap-1 py-2 text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="nav-tool-clothes"
+            >
+              <Shirt className="w-4 h-4" />
+              <span className="text-[10px] font-medium">Clothes</span>
+            </Link>
+            <Link
+              href="/live"
+              className="flex flex-col items-center gap-1 py-2 text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="nav-tool-live"
+            >
+              <Store className="w-4 h-4" />
+              <span className="text-[10px] font-medium">Live</span>
+            </Link>
+            <Link
+              href="/admin"
+              className="flex flex-col items-center gap-1 py-2 text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="nav-tool-admin"
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              <span className="text-[10px] font-medium">Admin</span>
+            </Link>
+          </div>
+          <div className="flex">
           <button
             onClick={() => setActiveTab('scanner')}
             className={`flex-1 flex flex-col items-center gap-1 py-3 transition-colors ${
@@ -2470,6 +2513,7 @@ export default function Staff() {
             <Grid3X3 className="w-5 h-5" />
             <span className="text-xs font-medium">Shelves</span>
           </button>
+          </div>
         </div>
       </div>
       <Dialog open={cameraOpen} onOpenChange={(open) => !open && closeCamera()}>
