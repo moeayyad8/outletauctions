@@ -1034,12 +1034,15 @@ export default function Staff() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-28">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-background to-background pb-28">
       {activeTab === 'scanner' && (
-        <div className="max-w-2xl mx-auto p-4 space-y-6">
-          <header className="pt-2">
-            <div className="flex items-center justify-between mb-1">
-              <h1 className="text-2xl font-bold tracking-tight">Scanner</h1>
+        <div className="max-w-2xl mx-auto p-4 space-y-5">
+          <header className="pt-2 rounded-2xl border bg-card/80 backdrop-blur px-4 py-3 shadow-sm">
+            <div className="flex items-center justify-between mb-1.5">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight">Scanner</h1>
+                <p className="text-xs text-muted-foreground">Scan, photo, route, then send to inventory</p>
+              </div>
               <div className="flex items-center gap-2">
                 <Link href="/admin">
                   <Button variant="ghost" size="sm" data-testid="button-admin">
@@ -1100,7 +1103,7 @@ export default function Staff() {
           </header>
 
           {/* Scan Defaults Panel */}
-          <div className="bg-muted/50 rounded-xl p-3 space-y-3">
+          <div className="bg-card rounded-2xl border p-3.5 space-y-3 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <Settings2 className="w-4 h-4" />
@@ -1273,7 +1276,7 @@ export default function Staff() {
             </p>
           </div>
 
-          <div className="relative">
+          <div className="relative rounded-2xl border bg-card/90 p-3 shadow-sm">
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -1313,7 +1316,7 @@ export default function Staff() {
           </div>
 
           {batch.length === 0 ? (
-            <div className="text-center py-16 px-4">
+            <div className="text-center py-16 px-4 rounded-2xl border bg-card shadow-sm">
               <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
                 <Package className="w-8 h-8 text-muted-foreground" />
               </div>
@@ -1326,7 +1329,7 @@ export default function Staff() {
             <>
               <div className="space-y-3">
                 {batch.map((item) => (
-                  <Card key={item.id} className="overflow-hidden">
+                  <Card key={item.id} className="overflow-hidden rounded-2xl border shadow-sm">
                     <CardContent className="p-0">
                       <div className="flex">
                         <div className="w-24 h-24 bg-muted flex items-center justify-center shrink-0 relative group">
@@ -1684,7 +1687,7 @@ export default function Staff() {
             </>
           )}
 
-          <Card>
+          <Card className="rounded-2xl shadow-sm">
             <CardContent className="p-3">
               <p className="text-xs font-medium text-muted-foreground mb-2">Quick Add Tag</p>
               <div className="flex gap-2">
@@ -2420,8 +2423,8 @@ export default function Staff() {
         </div>
       )}
       {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-background border-t safe-area-pb">
-        <div className="max-w-2xl mx-auto">
+      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur border-t safe-area-pb">
+        <div className="max-w-2xl mx-auto shadow-[0_-8px_24px_rgba(0,0,0,0.06)]">
           <div className="grid grid-cols-5 border-b">
             <Link
               href="/inventory"
