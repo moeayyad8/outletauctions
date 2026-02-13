@@ -310,7 +310,7 @@ export default function Inventory() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-background to-background">
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b">
         <div className="flex items-center gap-4 p-4">
           <Link href="/staff">
@@ -318,7 +318,10 @@ export default function Inventory() {
               <ArrowLeft className="w-5 h-5" />
             </Button>
           </Link>
-          <h1 className="text-lg font-bold">Inventory</h1>
+          <div>
+            <h1 className="text-lg font-bold">Inventory</h1>
+            <p className="text-xs text-muted-foreground">Track local inventory, exports, and listing state</p>
+          </div>
           <Badge variant="secondary" className="ml-auto">
             {auctions.length} items
           </Badge>
@@ -326,8 +329,29 @@ export default function Inventory() {
       </header>
 
       <main className="p-4 space-y-4">
+        <div className="grid grid-cols-3 gap-2">
+          <Card className="rounded-xl shadow-sm">
+            <CardContent className="p-3">
+              <p className="text-[11px] text-muted-foreground">Ready eBay</p>
+              <p className="text-xl font-bold">{readyToExportItems.length}</p>
+            </CardContent>
+          </Card>
+          <Card className="rounded-xl shadow-sm">
+            <CardContent className="p-3">
+              <p className="text-[11px] text-muted-foreground">Exported</p>
+              <p className="text-xl font-bold">{exportedItems.length}</p>
+            </CardContent>
+          </Card>
+          <Card className="rounded-xl shadow-sm">
+            <CardContent className="p-3">
+              <p className="text-[11px] text-muted-foreground">Listed</p>
+              <p className="text-xl font-bold">{listedItems.length}</p>
+            </CardContent>
+          </Card>
+        </div>
+
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3" data-testid="tabs-inventory">
+          <TabsList className="grid w-full grid-cols-3 rounded-xl bg-card border" data-testid="tabs-inventory">
             <TabsTrigger value="all" data-testid="tab-all">
               All ({auctions.length})
             </TabsTrigger>
@@ -380,7 +404,7 @@ export default function Inventory() {
           </TabsContent>
 
           <TabsContent value="ebay" className="mt-4 space-y-4">
-            <Card>
+            <Card className="rounded-2xl shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
                 <div>
                   <CardTitle className="text-base">Ready to Export</CardTitle>
@@ -414,7 +438,7 @@ export default function Inventory() {
             </Card>
 
             {exportedItems.length > 0 && (
-              <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-900/20">
+              <Card className="rounded-2xl shadow-sm border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-900/20">
                 <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
                   <div className="flex items-center gap-2">
                     <Upload className="w-4 h-4 text-amber-600" />
@@ -447,7 +471,7 @@ export default function Inventory() {
             )}
 
             {listedItems.length > 0 && (
-              <Card>
+              <Card className="rounded-2xl shadow-sm">
                 <CardHeader className="pb-2">
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-600" />
@@ -474,7 +498,7 @@ export default function Inventory() {
         </Tabs>
 
         {/* Data Migration Section */}
-        <Card className="mt-6 border-dashed">
+        <Card className="mt-6 border-dashed rounded-2xl shadow-sm">
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
               <Database className="w-4 h-4 text-muted-foreground" />
@@ -540,9 +564,9 @@ function InventoryList({ items, showDestination = false }: { items: Auction[]; s
   return (
     <div className="space-y-2">
       {items.map(item => (
-        <Card key={item.id} className="overflow-hidden">
-          <div className="flex gap-3 p-3">
-            <div className="w-16 h-16 bg-muted rounded flex items-center justify-center flex-shrink-0">
+        <Card key={item.id} className="overflow-hidden rounded-xl shadow-sm border">
+          <div className="flex gap-3 p-3.5">
+            <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center flex-shrink-0">
               {item.image ? (
                 <img 
                   src={item.image} 
@@ -553,14 +577,14 @@ function InventoryList({ items, showDestination = false }: { items: Auction[]; s
                 <ImageIcon className="w-6 h-6 text-muted-foreground" />
               )}
             </div>
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 space-y-1">
               <p className="font-medium text-sm truncate" data-testid={`text-title-${item.id}`}>
                 {item.title}
               </p>
               <p className="text-xs text-muted-foreground">
                 {item.internalCode || item.upc || 'No code'}
               </p>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                 {item.retailPrice && (
                   <Badge variant="secondary" className="text-xs">
                     ${(item.retailPrice / 100).toFixed(2)}
