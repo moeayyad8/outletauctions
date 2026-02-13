@@ -42,10 +42,12 @@ interface RoutingResult {
 type BrandTier = "A" | "B" | "C";
 type WeightClass = "light" | "medium" | "heavy";
 type ItemCondition = "new" | "like_new" | "good" | "acceptable" | "parts_damaged";
+type InventoryLocation = "bins" | "things" | "flatrate";
 
 interface BatchItem extends ScanResult {
   customImage: string | null;
   customImages: string[];
+  inventoryLocation: InventoryLocation;
   selectedTags: number[];
   id: string;
   destination: DestinationType;
@@ -64,6 +66,7 @@ type TabType = 'scanner' | 'inventory' | 'fulfillment' | 'shelves';
 interface ScanDefaults {
   destination: DestinationType;
   shelfId: number | null;
+  inventoryLocation: InventoryLocation;
   brandTier: BrandTier | null;
   condition: ItemCondition | null;
   weightClass: WeightClass | null;
@@ -74,6 +77,7 @@ interface ScanDefaults {
 const DEFAULT_SCAN_SETTINGS: ScanDefaults = {
   destination: 'ebay',
   shelfId: null,
+  inventoryLocation: 'bins',
   brandTier: null,
   condition: null,
   weightClass: null,
@@ -514,6 +518,7 @@ export default function Staff() {
         ...scanData,
         customImage: null,
         customImages: [],
+        inventoryLocation: defaults.inventoryLocation,
         selectedTags: [],
         id: `${scanData.code}-${Date.now()}`,
         destination: defaults.destination,
@@ -563,6 +568,7 @@ export default function Staff() {
         highestPrice: null,
         customImage: null,
         customImages: [],
+        inventoryLocation: defaults.inventoryLocation,
         selectedTags: [],
         id: `${codeData.code}-${Date.now()}`,
         destination: defaults.destination,
@@ -589,6 +595,12 @@ export default function Staff() {
   const setItemShelf = (id: string, shelfId: number | null) => {
     setBatch(prev => prev.map(item => 
       item.id === id ? { ...item, shelfId } : item
+    ));
+  };
+
+  const setItemInventoryLocation = (id: string, inventoryLocation: InventoryLocation) => {
+    setBatch(prev => prev.map(item =>
+      item.id === id ? { ...item, inventoryLocation } : item
     ));
   };
 
@@ -677,6 +689,10 @@ export default function Staff() {
       const allImages = item.customImages.length > 0
         ? item.customImages
         : (item.customImage ? [item.customImage] : (item.image ? [item.image] : []));
+      const externalPayload = {
+        images: allImages,
+        inventoryLocation: item.inventoryLocation,
+      };
       const auctionData = {
         upc: item.code,
         title: item.title,
@@ -695,7 +711,7 @@ export default function Staff() {
         stockQuantity: item.stockQuantity,
         showOnHomepage: item.showOnHomepage ? 1 : 0,
         scannedByStaffId: loggedInStaffRef.current?.id || null,
-        externalPayload: allImages.length > 0 ? { images: allImages } : null,
+        externalPayload,
       };
       const response = await apiRequest('POST', '/api/staff/auctions', auctionData);
       const auction = await response.json();
@@ -1133,6 +1149,21 @@ export default function Staff() {
               </Select>
 
               <Select
+                value={scanDefaults.inventoryLocation}
+                onValueChange={(val) => updateScanDefaults({ inventoryLocation: val as InventoryLocation })}
+              >
+                <SelectTrigger className="h-9" data-testid="select-default-inventory-location">
+                  <Archive className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                  <SelectValue placeholder="Inventory Location" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bins">Bins</SelectItem>
+                  <SelectItem value="things">Things</SelectItem>
+                  <SelectItem value="flatrate">Flatrate</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select
                 value={scanDefaults.stockQuantity.toString()}
                 onValueChange={(val) => updateScanDefaults({ stockQuantity: parseInt(val) })}
               >
@@ -1399,6 +1430,23 @@ export default function Staff() {
                                 </SelectContent>
                               </Select>
                             </div>
+                          </div>
+
+                          <div className="mt-2">
+                            <Select
+                              value={item.inventoryLocation}
+                              onValueChange={(val) => setItemInventoryLocation(item.id, val as InventoryLocation)}
+                            >
+                              <SelectTrigger className="h-7 text-xs w-[170px]" data-testid={`select-location-${item.id}`}>
+                                <Archive className="w-3 h-3 mr-1" />
+                                <SelectValue placeholder="Inventory Location" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="bins">Bins</SelectItem>
+                                <SelectItem value="things">Things</SelectItem>
+                                <SelectItem value="flatrate">Flatrate</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </div>
 
                           <div className="mt-2">

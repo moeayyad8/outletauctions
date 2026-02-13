@@ -10,6 +10,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Auction } from "@shared/schema";
 
+type InventoryLocation = "bins" | "things" | "flatrate" | "unassigned";
+
 const EBAY_CONDITION_MAP: Record<string, string> = {
   new: "1000",
   like_new: "3000",
@@ -32,6 +34,19 @@ function getPublicImageUrl(image: string | null): string {
     return `${window.location.origin}${image}`;
   }
   return image;
+}
+
+function getInventoryLocation(item: Auction): InventoryLocation {
+  const loc = (item.externalPayload as any)?.inventoryLocation;
+  if (loc === "bins" || loc === "things" || loc === "flatrate") return loc;
+  return "unassigned";
+}
+
+function locationLabel(location: InventoryLocation): string {
+  if (location === "bins") return "Bins";
+  if (location === "things") return "Things";
+  if (location === "flatrate") return "Flatrate";
+  return "Unassigned";
 }
 
 function generateEbayCSV(items: Auction[]): string {
@@ -116,6 +131,26 @@ export default function Inventory() {
   
   const amazonItems = useMemo(() => 
     auctions.filter(a => a.destination === 'amazon'), 
+    [auctions]
+  );
+
+  const binsItems = useMemo(
+    () => auctions.filter(a => getInventoryLocation(a) === "bins"),
+    [auctions]
+  );
+
+  const thingsItems = useMemo(
+    () => auctions.filter(a => getInventoryLocation(a) === "things"),
+    [auctions]
+  );
+
+  const flatrateItems = useMemo(
+    () => auctions.filter(a => getInventoryLocation(a) === "flatrate"),
+    [auctions]
+  );
+
+  const unassignedItems = useMemo(
+    () => auctions.filter(a => getInventoryLocation(a) === "unassigned"),
     [auctions]
   );
 
@@ -305,7 +340,43 @@ export default function Inventory() {
           </TabsList>
 
           <TabsContent value="all" className="mt-4 space-y-3">
-            <InventoryList items={auctions} showDestination />
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Bins</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-2">
+                <InventoryList items={binsItems} showDestination />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Things</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-2">
+                <InventoryList items={thingsItems} showDestination />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Flatrate</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-2">
+                <InventoryList items={flatrateItems} showDestination />
+              </CardContent>
+            </Card>
+
+            {unassignedItems.length > 0 && (
+              <Card className="border-amber-300">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base text-amber-700">Unassigned</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-2">
+                  <InventoryList items={unassignedItems} showDestination />
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="ebay" className="mt-4 space-y-4">
@@ -495,6 +566,9 @@ function InventoryList({ items, showDestination = false }: { items: Auction[]; s
                     ${(item.retailPrice / 100).toFixed(2)}
                   </Badge>
                 )}
+                <Badge variant="outline" className="text-xs">
+                  {locationLabel(getInventoryLocation(item))}
+                </Badge>
                 {showDestination && (
                   <Badge 
                     variant={item.destination === 'ebay' ? 'default' : item.destination === 'amazon' ? 'outline' : 'secondary'}
@@ -541,6 +615,8 @@ function EbayItemRow({ item, status }: { item: Auction; status?: 'exported' | 'l
         <p className="font-medium text-sm truncate">{item.title}</p>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>{item.internalCode || 'No SKU'}</span>
+          <span>|</span>
+          <span>{locationLabel(getInventoryLocation(item))}</span>
           <span>|</span>
           <span>{conditionLabel}</span>
           {item.retailPrice && (
