@@ -51,11 +51,36 @@ function normalizeShelf(row: ShelfRow) {
   };
 }
 
+async function ensureLocationShelves(db: Pool) {
+  const existing = await db.query<{ code: string }>("SELECT code FROM shelves");
+  const existingCodes = new Set(existing.rows.map((r) => r.code.toUpperCase()));
+
+  const inserts: Array<{ name: string; code: string }> = [];
+  for (let i = 1; i <= 32; i++) {
+    const suffix = i.toString().padStart(2, "0");
+    const binsCode = `BIN${suffix}`;
+    const thingsCode = `THG${suffix}`;
+    if (!existingCodes.has(binsCode)) {
+      inserts.push({ name: `Bins Shelf ${i}`, code: binsCode });
+    }
+    if (!existingCodes.has(thingsCode)) {
+      inserts.push({ name: `Things Shelf ${i}`, code: thingsCode });
+    }
+  }
+
+  if (inserts.length === 0) return;
+
+  for (const row of inserts) {
+    await db.query("INSERT INTO shelves (name, code) VALUES ($1, $2)", [row.name, row.code]);
+  }
+}
+
 export default async function handler(req: any, res: any) {
   try {
     const db = getPool();
 
     if (req.method === "GET") {
+      await ensureLocationShelves(db);
       const result = await db.query<ShelfRow>(
         "SELECT id, name, code, item_count, created_at FROM shelves ORDER BY id",
       );

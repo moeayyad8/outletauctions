@@ -43,6 +43,7 @@ type BrandTier = "A" | "B" | "C";
 type WeightClass = "light" | "medium" | "heavy";
 type ItemCondition = "new" | "like_new" | "good" | "acceptable" | "parts_damaged";
 type InventoryLocation = "bins" | "things" | "flatrate";
+type ShelfLocation = "bins" | "things";
 
 interface BatchItem extends ScanResult {
   customImage: string | null;
@@ -269,6 +270,7 @@ export default function Staff() {
   const [newTagType, setNewTagType] = useState<'location' | 'category'>('category');
   const [isSending, setIsSending] = useState(false);
   const [selectedShelf, setSelectedShelf] = useState<number | null>(null);
+  const [shelfLocation, setShelfLocation] = useState<ShelfLocation>('bins');
   const [shelfScanCode, setShelfScanCode] = useState('');
   const [shelfScanMode, setShelfScanMode] = useState<'in' | 'out'>('in');
   const [expandedItem, setExpandedItem] = useState<number | null>(null);
@@ -409,6 +411,26 @@ export default function Staff() {
     queryKey: ['/api/shelves'],
   });
 
+  const getShelfLocation = (shelf: Shelf): ShelfLocation | null => {
+    if (shelf.code.startsWith('BIN')) return 'bins';
+    if (shelf.code.startsWith('THG')) return 'things';
+    return null;
+  };
+
+  const getShelvesForLocation = (location: InventoryLocation): Shelf[] => {
+    if (location === 'bins') return shelves.filter((s) => getShelfLocation(s) === 'bins');
+    if (location === 'things') return shelves.filter((s) => getShelfLocation(s) === 'things');
+    return [];
+  };
+
+  const getAuctionInventoryLocation = (auction: Auction): InventoryLocation | 'unassigned' => {
+    const location = (auction.externalPayload as any)?.inventoryLocation;
+    if (location === 'bins' || location === 'things' || location === 'flatrate') return location;
+    return 'unassigned';
+  };
+
+  const shelvesForShelvesTab = shelves.filter((s) => getShelfLocation(s) === shelfLocation);
+
   const locationTags = allTags.filter(t => t.type === 'location');
   const categoryTags = allTags.filter(t => t.type === 'category');
 
@@ -464,6 +486,23 @@ export default function Staff() {
       }, 100);
     }
   }, [showBarcodeDialog, barcodeValue]);
+
+  useEffect(() => {
+    if (selectedShelf === null) return;
+    const existsInLocation = shelvesForShelvesTab.some((s) => s.id === selectedShelf);
+    if (!existsInLocation) {
+      setSelectedShelf(null);
+      setShelfScanCode('');
+    }
+  }, [selectedShelf, shelvesForShelvesTab]);
+
+  useEffect(() => {
+    if (!scanDefaults.shelfId) return;
+    const validShelfIds = new Set(getShelvesForLocation(scanDefaults.inventoryLocation).map((s) => s.id));
+    if (!validShelfIds.has(scanDefaults.shelfId)) {
+      updateScanDefaults({ shelfId: null });
+    }
+  }, [scanDefaults.inventoryLocation, scanDefaults.shelfId, shelves]);
 
   const { uploadFile, isUploading } = useUpload();
 
@@ -599,9 +638,12 @@ export default function Staff() {
   };
 
   const setItemInventoryLocation = (id: string, inventoryLocation: InventoryLocation) => {
-    setBatch(prev => prev.map(item =>
-      item.id === id ? { ...item, inventoryLocation } : item
-    ));
+    setBatch(prev => prev.map(item => {
+      if (item.id !== id) return item;
+      const validShelfIds = new Set(getShelvesForLocation(inventoryLocation).map((s) => s.id));
+      const nextShelfId = item.shelfId && validShelfIds.has(item.shelfId) ? item.shelfId : null;
+      return { ...item, inventoryLocation, shelfId: nextShelfId };
+    }));
   };
 
   const updateItemAndRecalculateRouting = async (
@@ -840,7 +882,7 @@ export default function Staff() {
   const handleSendToInventory = async () => {
     if (batch.length === 0) return;
     
-    const itemsWithoutShelf = batch.filter(item => !item.shelfId);
+    const itemsWithoutShelf = batch.filter(item => item.inventoryLocation !== 'flatrate' && !item.shelfId);
     if (itemsWithoutShelf.length > 0) {
       toast({ 
         title: 'Select location for all items', 
@@ -1133,6 +1175,7 @@ export default function Staff() {
               <Select
                 value={scanDefaults.shelfId?.toString() || 'none'}
                 onValueChange={(val) => updateScanDefaults({ shelfId: val === 'none' ? null : parseInt(val) })}
+                disabled={scanDefaults.inventoryLocation === 'flatrate'}
               >
                 <SelectTrigger className="h-9" data-testid="select-default-shelf">
                   <MapPin className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
@@ -1140,7 +1183,7 @@ export default function Staff() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">No shelf</SelectItem>
-                  {shelves.map((shelf) => (
+                  {getShelvesForLocation(scanDefaults.inventoryLocation).map((shelf) => (
                     <SelectItem key={shelf.id} value={shelf.id.toString()}>
                       {shelf.code}
                     </SelectItem>
@@ -1150,7 +1193,7 @@ export default function Staff() {
 
               <Select
                 value={scanDefaults.inventoryLocation}
-                onValueChange={(val) => updateScanDefaults({ inventoryLocation: val as InventoryLocation })}
+                onValueChange={(val) => updateScanDefaults({ inventoryLocation: val as InventoryLocation, shelfId: null })}
               >
                 <SelectTrigger className="h-9" data-testid="select-default-inventory-location">
                   <Archive className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
@@ -1413,16 +1456,17 @@ export default function Staff() {
                               <Select
                                 value={item.shelfId?.toString() || ''}
                                 onValueChange={(val) => setItemShelf(item.id, val ? parseInt(val) : null)}
+                                disabled={item.inventoryLocation === 'flatrate'}
                               >
                                 <SelectTrigger 
-                                  className={`w-[110px] h-7 text-xs ${!item.shelfId ? 'border-orange-400 text-orange-600' : ''}`}
+                                  className={`w-[110px] h-7 text-xs ${item.inventoryLocation !== 'flatrate' && !item.shelfId ? 'border-orange-400 text-orange-600' : ''}`}
                                   data-testid={`select-shelf-${item.id}`}
                                 >
                                   <MapPin className="w-3 h-3 mr-1" />
                                   <SelectValue placeholder="Location" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {shelves.map(shelf => (
+                                  {getShelvesForLocation(item.inventoryLocation).map(shelf => (
                                     <SelectItem key={shelf.id} value={shelf.id.toString()}>
                                       {shelf.name}
                                     </SelectItem>
@@ -2091,22 +2135,35 @@ export default function Staff() {
           <header className="pt-2">
             <div className="flex items-center justify-between mb-1">
               <h1 className="text-2xl font-bold tracking-tight">Shelves</h1>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => setShowCreateShelfDialog(true)}
-                  data-testid="button-create-shelf"
-                >
-                  <Plus className="w-4 h-4 mr-1" />
-                  Create Shelf
-                </Button>
-                <Badge variant="secondary" className="font-mono text-xs">
-                  {shelves.length} shelves
-                </Badge>
-              </div>
+              <Badge variant="secondary" className="font-mono text-xs">
+                {shelvesForShelvesTab.length} shelves
+              </Badge>
             </div>
             <p className="text-sm text-muted-foreground">Track items across shelf locations</p>
           </header>
+
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant={shelfLocation === 'bins' ? 'default' : 'outline'}
+              onClick={() => {
+                setShelfLocation('bins');
+                setSelectedShelf(null);
+              }}
+              data-testid="button-shelves-location-bins"
+            >
+              Bins (1-32)
+            </Button>
+            <Button
+              variant={shelfLocation === 'things' ? 'default' : 'outline'}
+              onClick={() => {
+                setShelfLocation('things');
+                setSelectedShelf(null);
+              }}
+              data-testid="button-shelves-location-things"
+            >
+              Things (1-32)
+            </Button>
+          </div>
 
           <Card>
             <CardContent className="p-3">
@@ -2114,12 +2171,12 @@ export default function Staff() {
                 <div className="relative flex-1">
                   <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    placeholder="Scan shelf barcode (OASXX)..."
+                    placeholder={shelfLocation === 'bins' ? "Scan shelf barcode (BINXX)..." : "Scan shelf barcode (THGXX)..."}
                     className="pl-9"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         const input = e.currentTarget.value.trim().toUpperCase();
-                        const shelf = shelves.find(s => s.code === input);
+                        const shelf = shelvesForShelvesTab.find(s => s.code === input);
                         if (shelf) {
                           setSelectedShelf(shelf.id);
                           e.currentTarget.value = '';
@@ -2137,25 +2194,19 @@ export default function Staff() {
 
           {selectedShelf === null ? (
             <>
-              {shelves.length === 0 && (
+              {shelvesForShelvesTab.length === 0 && (
                 <Card>
                   <CardContent className="py-8 text-center space-y-3">
                     <Archive className="w-8 h-8 mx-auto text-muted-foreground opacity-60" />
-                    <p className="text-sm text-muted-foreground">No shelves yet. Create your first shelf to start organizing inventory.</p>
-                    <Button
-                      size="sm"
-                      onClick={() => setShowCreateShelfDialog(true)}
-                      data-testid="button-create-first-shelf"
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      Create Shelf
-                    </Button>
+                    <p className="text-sm text-muted-foreground">No shelves found for this location.</p>
                   </CardContent>
                 </Card>
               )}
               <div className="grid grid-cols-4 gap-2">
-                {shelves.map((shelf) => {
-                  const itemsOnShelf = auctions.filter(a => a.shelfId === shelf.id);
+                {shelvesForShelvesTab.map((shelf) => {
+                  const itemsOnShelf = auctions.filter(
+                    a => a.shelfId === shelf.id && getAuctionInventoryLocation(a) === shelfLocation
+                  );
                   const hasItems = itemsOnShelf.length > 0;
                   return (
                     <button
@@ -2194,17 +2245,17 @@ export default function Staff() {
                 </Button>
                 <div className="flex-1">
                   <h2 className="font-bold text-lg">
-                    {shelves.find(s => s.id === selectedShelf)?.name}
+                    {shelvesForShelvesTab.find(s => s.id === selectedShelf)?.name}
                   </h2>
                   <span className="font-mono text-sm text-muted-foreground">
-                    {shelves.find(s => s.id === selectedShelf)?.code}
+                    {shelvesForShelvesTab.find(s => s.id === selectedShelf)?.code}
                   </span>
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    const shelf = shelves.find(s => s.id === selectedShelf);
+                    const shelf = shelvesForShelvesTab.find(s => s.id === selectedShelf);
                     if (shelf) {
                       handlePrintBarcode(shelf.code);
                     }
@@ -2251,10 +2302,10 @@ export default function Staff() {
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && shelfScanCode.trim() && !updateAuctionShelfMutation.isPending) {
                             const searchCode = shelfScanCode.trim();
-                            const item = auctions.find(a => 
-                              (a.upc && a.upc === searchCode) || 
-                              (a.internalCode && a.internalCode === searchCode)
-                            );
+                            const matchesCode = (a: Auction) =>
+                              (a.upc && a.upc === searchCode) ||
+                              (a.internalCode && a.internalCode === searchCode);
+                            const item = auctions.find(a => matchesCode(a) && getAuctionInventoryLocation(a) === shelfLocation);
                             if (item) {
                               if (shelfScanMode === 'in') {
                                 updateAuctionShelfMutation.mutate(
@@ -2268,7 +2319,12 @@ export default function Staff() {
                                 );
                               }
                             } else {
-                              toast({ title: 'Item not found in inventory', variant: 'destructive' });
+                              const itemInAnotherLocation = auctions.find(a => matchesCode(a));
+                              if (itemInAnotherLocation) {
+                                toast({ title: 'Item belongs to a different location', variant: 'destructive' });
+                              } else {
+                                toast({ title: 'Item not found in inventory', variant: 'destructive' });
+                              }
                             }
                             setShelfScanCode('');
                           }
@@ -2284,16 +2340,16 @@ export default function Staff() {
 
               <div className="space-y-2">
                 <div className="text-sm font-medium text-muted-foreground">
-                  Items on this shelf ({auctions.filter(a => a.shelfId === selectedShelf).length})
+                  Items on this shelf ({auctions.filter(a => a.shelfId === selectedShelf && getAuctionInventoryLocation(a) === shelfLocation).length})
                 </div>
-                {auctions.filter(a => a.shelfId === selectedShelf).length === 0 ? (
+                {auctions.filter(a => a.shelfId === selectedShelf && getAuctionInventoryLocation(a) === shelfLocation).length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <Package className="w-8 h-8 mx-auto mb-2 opacity-50" />
                     <p className="text-sm">No items on this shelf</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {auctions.filter(a => a.shelfId === selectedShelf).map((auction) => (
+                    {auctions.filter(a => a.shelfId === selectedShelf && getAuctionInventoryLocation(a) === shelfLocation).map((auction) => (
                       <Card key={auction.id} className="overflow-hidden">
                         <CardContent className="p-0">
                           <div className="flex items-center">
