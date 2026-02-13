@@ -1,7 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CountdownTimer } from './CountdownTimer';
-import { Gavel, Heart } from 'lucide-react';
+import { Gavel, Heart, Package } from 'lucide-react';
 import { useState } from 'react';
 
 interface AuctionCardProps {
@@ -46,12 +46,18 @@ export function AuctionCard({
       data-testid={`card-auction-${id}`}
     >
       <div className="relative aspect-square bg-muted overflow-hidden cursor-pointer" onClick={onClick}>
-        <img
-          src={image}
-          alt="Auction item"
-          className="w-full h-full object-cover"
-          data-testid={`img-auction-${id}`}
-        />
+        {image ? (
+          <img
+            src={image}
+            alt={title}
+            className="w-full h-full object-cover"
+            data-testid={`img-auction-${id}`}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Package className="h-8 w-8 text-muted-foreground" />
+          </div>
+        )}
         <div className="absolute top-2 right-2">
           <Button
             variant="outline"
@@ -66,13 +72,14 @@ export function AuctionCard({
       </div>
 
       <div className="p-3 space-y-2">
+        <p className="text-sm font-semibold leading-tight line-clamp-2 min-h-[2.5rem]">{title}</p>
         <div className="flex justify-between items-start text-sm">
           <div>
             <p className="text-muted-foreground">Ending in</p>
             <CountdownTimer endTime={endTime} compact />
           </div>
           <div className="text-right">
-            <p className="text-muted-foreground">Retail</p>
+            <p className="text-muted-foreground">Current Bid</p>
             <p className="font-bold" data-testid={`text-retail-${id}`}>
               ${currentBid.toLocaleString()}
             </p>
