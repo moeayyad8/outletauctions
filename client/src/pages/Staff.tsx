@@ -10,7 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useUpload } from '@/hooks/use-upload';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel, Store, ExternalLink, Grid3X3, ArrowRightLeft, LogIn, LogOut, AlertTriangle, CheckCircle2, Scale, ChevronDown, ChevronUp, Flag, Search, Settings2, RotateCcw, Shirt, LayoutDashboard, User, Star } from 'lucide-react';
+import { Package, Camera, X, Plus, Printer, Trash2, Send, ScanLine, Archive, ImagePlus, Truck, Gavel, Store, ExternalLink, Grid3X3, ArrowRightLeft, LogIn, LogOut, AlertTriangle, CheckCircle2, Scale, ChevronDown, ChevronUp, Flag, Search, Settings2, RotateCcw, Shirt, LayoutDashboard, User, Star, Car } from 'lucide-react';
 import { SiAmazon, SiEbay } from 'react-icons/si';
 import JsBarcode from 'jsbarcode';
 import type { Auction, Tag as TagType, Shelf } from '@shared/schema';
@@ -2425,7 +2425,7 @@ export default function Staff() {
       {/* Bottom Navigation */}
       <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur border-t safe-area-pb">
         <div className="max-w-2xl mx-auto shadow-[0_-8px_24px_rgba(0,0,0,0.06)]">
-          <div className="grid grid-cols-5 border-b">
+          <div className="grid grid-cols-6 border-b">
             <Link
               href="/inventory"
               className="flex flex-col items-center gap-1 py-2 text-muted-foreground hover:text-foreground transition-colors"
@@ -2449,6 +2449,14 @@ export default function Staff() {
             >
               <Shirt className="w-4 h-4" />
               <span className="text-[10px] font-medium">Clothes</span>
+            </Link>
+            <Link
+              href="/cars"
+              className="flex flex-col items-center gap-1 py-2 text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="nav-tool-cars"
+            >
+              <Car className="w-4 h-4" />
+              <span className="text-[10px] font-medium">Cars</span>
             </Link>
             <Link
               href="/live"

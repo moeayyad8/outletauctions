@@ -15,6 +15,7 @@ import Clothes from "@/pages/Clothes";
 import AdminDashboard from "@/pages/AdminDashboard";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
+import Cars from "@/pages/Cars";
 
 function Router() {
   return (
@@ -28,6 +29,7 @@ function Router() {
       <Route path="/value-finder" component={RetailValueFinder} />
       <Route path="/live" component={LiveView} />
       <Route path="/clothes" component={Clothes} />
+      <Route path="/cars" component={Cars} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/login" component={Login} />
       <Route component={NotFound} />
